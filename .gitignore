@@ -1,0 +1,5 @@
+main.elf
+main.s.o
+main.srec
+nios_macros.s
+projeto_micro.ncf
