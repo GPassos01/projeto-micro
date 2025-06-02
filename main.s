@@ -76,7 +76,7 @@ _start:
 
     FINISH_READ:
 
-    movi        r9,     BUFFER_ESCRITA
+    movi        r9,     BUFFER_ESCRITA #p0 00
 
     movi        r10,    0x30 #0 na tabela ASCII
 
