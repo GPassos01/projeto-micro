@@ -1,5 +1,5 @@
-main.elf
-main.s.o
-main.srec
+*.elf
+*.s.o
+*.srec
 nios_macros.s
 projeto_micro.ncf
