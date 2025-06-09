@@ -1,9 +1,9 @@
-# Projeto de Microprocessadores - Cronograma 3 Semanas
+# Projeto de Microprocessadores - Cronograma 4 Semanas
 ## Placa FPGA DE2-115 - 1º Semestre 2025
 
 ---
 
-## **📅 CRONOGRAMA DE 3 SEMANAS**
+## **📅 CRONOGRAMA DE 4 SEMANAS**
 
 ### **SEMANA 1: Configuração e Funcionalidades Básicas**
 **Setup e UART**
@@ -12,10 +12,7 @@
 - Teste de recepção de comandos
 - Interface console ("Entre com o comando:")
 
-**Controle de LEDs**
-- Comandos 00 xx (acender LED) e 01 xx (apagar LED)
-- Mapeamento dos registradores dos LEDs vermelhos
-- Validação básica de entrada
+### **SEMANA 2: Controle de LED's**
 
 **Parser e Estrutura Base**
 - Parser completo de comandos
@@ -23,7 +20,13 @@
 - Testes dos comandos básicos de LED
 - **Funcionando:** LEDs controlados via UART
 
-### **SEMANA 2: Funcionalidades Avançadas**
+**Controle de LEDs**
+- Comandos 00 xx (acender LED) e 01 xx (apagar LED)
+- Mapeamento dos registradores dos LEDs vermelhos
+- Validação básica de entrada
+
+### **SEMANA 3: Sistema de Animação e início cronômetro**
+  
 **Sistema de Animação**
 - Comando 10 (iniciar animação)
 - Leitura da chave SW0
@@ -35,12 +38,13 @@
 - Configuração dos displays de 7 segmentos
 - Contagem básica de segundos
 
+### **SEMANA 4: Integração, Testes e Documentação**
+
 **Cronômetro Completo**
 - Integração com botão KEY1 (pause/resume)
 - Comando 21 (cancelar cronômetro)
 - **Funcionando:** Todas funcionalidades implementadas
-
-### **SEMANA 3: Integração, Testes e Documentação**
+  
 **Integração e Testes**
 - Integração de todos os módulos
 - Testes de sistema completo
