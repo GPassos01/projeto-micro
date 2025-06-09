@@ -1,42 +1,118 @@
+#========================================================================================================================================
+# Controle de LEDs - Nios II Assembly
+# Comandos: 00 XX (acender LED XX), 01 XX (apagar LED XX)
+#========================================================================================================================================
+
 .global _led
 
+# Incluir constantes do main.s
+.equ LED_BASE,      0x10000000
+.equ ASCII_0,       0x30
+
+#========================================================================================================================================
+# Função: _led - Controlar LEDs individuais
+# Parâmetros: r4 = buffer do comando (ex: "00 05" ou "01 12")
+# Formato: [operação][espaço][número do LED]
+#   00 XX - Acender LED XX
+#   01 XX - Apagar LED XX
+#   XX = 00-17 (LEDs disponíveis na DE2-115)
+#========================================================================================================================================
+
 _led:
-    addi        r9,     r9,  1 #0p 00
-
-    movi        r10,    0x30
-
-    ldb         r11,    (r9) 
-
-    beq         r11,    r10, ACENDER_LED 
-
-    addi        r10,    r10, 1
-
-    beq         r11,    r10, APAGAR_LED
-
-    ACENDER_LED:
-    addi        r9,     r9,  2 #00 p0
-
-    ldb         r11,    (r9)   
-
-    subi        r11,    r11, 0x30 #(n + 30) - 30
-
-    slli        r12,    r11, 3 #8*n
-
-    slli        r13,    r11, 1 #2*n
-
-    add		    r14,	r12, r13 #10*n - dezena
-
-    addi        r9,     r9,  1 #00 0p
-
-    ldb         r11,    (r9)
-
-    subi        r11,    r11, 0x30 #(n + 30) - 30 - unidade
-
-    add         r14,    r14, r11 #x = [dezena][unidade]   
-
-    br          END_LED 
-
-    APAGAR_LED:     
-
-END_LED:
-ret
+    # Preservar registradores (Stack Frame)
+    addi    sp, sp, -28
+    stw     ra, 24(sp)
+    stw     r16, 20(sp)         # Buffer do comando
+    stw     r17, 16(sp)         # Operação (0=acender, 1=apagar)
+    stw     r18, 12(sp)         # Número do LED
+    stw     r19, 8(sp)          # Registrador de trabalho
+    stw     r20, 4(sp)          # Base dos LEDs
+    stw     r21, 0(sp)          # Estado atual dos LEDs
+    
+    mov     r16, r4             # r16 = buffer do comando
+    
+    # Extrair operação (já validada no parser principal)
+    ldb     r19, 1(r16)         # Segundo dígito da operação
+    subi    r17, r19, ASCII_0   # r17 = operação (0 ou 1)
+    
+    # Pular espaço e ir para o número do LED
+    # Formato esperado: "00 05" ou "01 12"
+    addi    r16, r16, 3         # Pular "00 " ou "01 
+    
+    # Extrair número do LED (formato: "05", "12", etc.)
+    ldb     r19, 0(r16)         # Dezena
+    subi    r19, r19, ASCII_0   # Converter de ASCII para número
+    
+    # Validar dígito da dezena
+    bltu    r19, r0, led_error # Se for < 0, erro
+    movi    r20, 1 #numero maximo da dezena
+    bgeu    r19, r20, led_error # Se for > 1, erro
+    
+    # Calcular dezena * 10 usando shifts: 10 = 8 + 2
+    slli    r20, r19, 3         # r20 = r19 * 8
+    slli    r19, r19, 1         # r19 = r19 * 2
+    add     r19, r20, r19       # r19 = r19*8 + r19*2 = r19*10
+    mov     r18, r19            # r18 = dezena * 10
+    
+    # Extrair unidade
+    ldb     r19, 1(r16)         # Unidade
+    subi    r19, r19, ASCII_0   # Converter de ASCII para número
+    
+    # Validar dígito da unidade
+    bltu    r19, r0, led_error # Se for < 0, erro
+    movi    r20, 7 #numero maximo da unidade
+    bgeu    r19, r20, led_error # Se for > 7, erro
+    
+    # Calcular número final do LED
+    add     r18, r18, r19       # r18 = dezena*10 + unidade
+    
+    # Validar número do LED (0-17)  ja validado acima
+    # bltu    r18, r0, led_error # Se for < 0, erro
+    # movi    r19, 18  #numero maximo do led
+    # bgeu    r18, r19, led_error # Se for > 18, erro
+    
+    # Carregar base dos LEDs e estado atual
+    movia   r20, LED_BASE
+    ldwio   r21, 0(r20)         # r21 = estado atual dos LEDs
+    
+    # Criar máscara para o LED específico
+    movi    r19, 1
+    sll     r19, r19, r18       # r19 = máscara (1 << número_do_LED)
+    
+    # Verificar operação
+    beq     r17, r0, led_on     # Se operação = 0, acender LED
+    movi    r19, 1
+    beq     r17, r19, led_off   # Se operação = 1, apagar LED
+    br      led_error
+    
+led_on:
+    # Acender LED: estado_atual |= (1 << número_do_LED)
+    or      r21, r21, r19
+    br      led_update
+    
+led_off:
+    # Apagar LED: estado_atual &= ~(1 << número_do_LED)
+    nor     r19, r19, r0        # Inverter máscara  VERIFICAR SE OPERAÇÃO EXISTE NO NIOS II
+    and     r21, r21, r19
+    br      led_update
+    
+led_update:
+    # Atualizar LEDs
+    stwio   r21, 0(r20)
+    br      led_done
+    
+led_error:
+    # IMPLEMENTAR FUNÇÃO DE ERRO
+    nop
+    
+led_done:
+    # Restaurar registradores
+    ldw     r21, 0(sp)
+    ldw     r20, 4(sp)
+    ldw     r19, 8(sp)
+    ldw     r18, 12(sp)
+    ldw     r17, 16(sp)
+    ldw     r16, 20(sp)
+    ldw     ra, 24(sp)
+    addi    sp, sp, 28
+    ret
