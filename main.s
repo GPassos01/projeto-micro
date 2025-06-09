@@ -106,9 +106,17 @@ _start:
         call _cronometro
     br _start
 
-.org    0x500
+.org 0x500
 MSG_PROMPT:  
 .asciz "Entre com o comando: "
+
+.align 
 BUFFER_ESCRITA:
 .skip 100
+
+.global LED_STATE
+.align 
+LED_STATE:
+.word 0
+
 .end
