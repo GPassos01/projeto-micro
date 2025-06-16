@@ -28,6 +28,8 @@
 .equ STARTED,		1
 
 _start:
+    call INICIALIZAR_INTERRUPCAO_TEMPORIZADOR
+
     movia		r8,	    0x10000000
 
     movia       r9,     MSG_PROMPT
@@ -106,6 +108,25 @@ _start:
         call _cronometro
     br _start
 
+    INICIALIZAR_INTERRUPCAO_TEMPORIZADOR:
+        movia r8, 0x10002000 #status register 
+
+        movia r9, 10000000 #200 ms
+        andi r10, r9, 0xFFFF #filtra os 16 bits inferiores
+        stwio r10, 8(r8) #escreve na parte baixa
+
+        srli r9, r9, 16 #filtrando os 16 bits superiores
+        stwio r9, 12(r8) #escreve na parte alta
+
+        movi r9, 0b111
+        stwio r9, 4(r8) #habilita e começa a contar
+
+
+        movi        r15,            0b1
+        wrctl		ienable,		r15 #ienable
+        wrctl       status,         r15 #PIE
+    ret
+
 .org 0x500
 MSG_PROMPT:  
 .asciz "Entre com o comando: "
@@ -117,6 +138,11 @@ BUFFER_ESCRITA:
 .global LED_STATE
 .align 
 LED_STATE:
+.word 0
+
+.global FLAG_INTERRUPCAO
+.align
+FLAG_INTERRUPCAO:
 .word 0
 
 .end
