@@ -1,8 +1,3 @@
-#========================================================================================================================================
-# Controle de LEDs - Nios II Assembly
-# Comandos: 00 XX (acender LED XX), 01 XX (apagar LED XX)
-#========================================================================================================================================
-
 .global _led
 
 # Incluir constantes do main.s
@@ -37,7 +32,7 @@ _led:
     
     # Pular espaço e ir para o número do LED
     # Formato esperado: "00 05" ou "01 12"
-    addi    r16, r16, 3         # Pular "00 " ou "01 
+    addi    r16, r16, 3         # Pular "00 " ou "01 "
     
     # Extrair número do LED (formato: "05", "12", etc.)
     ldb     r19, 0(r16)         # Dezena
@@ -45,8 +40,8 @@ _led:
     
     # Validar dígito da dezena
     bltu    r19, r0, led_error # Se for < 0, erro
-    movi    r20, 1 #numero maximo da dezena
-    bgeu    r19, r20, led_error # Se for > 1, erro
+    movi    r20, 1             # número máximo da dezena
+    bgtu    r19, r20, led_error # Se for > 1, erro
     
     # Calcular dezena * 10 usando shifts: 10 = 8 + 2
     slli    r20, r19, 3         # r20 = r19 * 8
@@ -60,16 +55,11 @@ _led:
     
     # Validar dígito da unidade
     bltu    r19, r0, led_error # Se for < 0, erro
-    movi    r20, 7 #numero maximo da unidade
-    bgeu    r19, r20, led_error # Se for > 7, erro
+    movi    r20, 7             # número máximo da unidade
+    bgtu    r19, r20, led_error # Se for > 7, erro
     
     # Calcular número final do LED
     add     r18, r18, r19       # r18 = dezena*10 + unidade
-    
-    # Validar número do LED (0-17)  ja validado acima
-    # bltu    r18, r0, led_error # Se for < 0, erro
-    # movi    r19, 18  #numero maximo do led
-    # bgeu    r18, r19, led_error # Se for > 18, erro
     
     # Carregar base dos LEDs e estado atual
     movia   r20, LED_BASE
@@ -92,9 +82,15 @@ led_on:
     
 led_off:
     # Apagar LED: estado_atual &= ~(1 << número_do_LED)
-    nor     r19, r19, r0        # Inverter máscara  VERIFICAR SE OPERAÇÃO EXISTE NO NIOS II
-    and     r21, r21, r19
+    movi    r19, 1
+    sll     r19, r19, r18           # r19 = 1 << número_do_LED
+    
+    # Inverter a máscara (para apagar o LED, precisamos de ~r19)
+    xori    r19, r19, 0xFFFF    # Inverte todos os bits de r19
+    
+    and     r21, r21, r19           # Atualizar o estado do LED (apagar o LED)
     br      led_update
+
     
 led_update:
     # Atualizar LEDs
