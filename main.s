@@ -42,6 +42,7 @@
 #========================================================================================================================================
 
 _start:
+    movia sp, 0x2000
     # Inicialização do sistema
     call    init_system
     
@@ -98,26 +99,7 @@ clear_buffer:
     ldw     r16, 8(sp)
     ldw     ra, 12(sp)
     addi    sp, sp, 16
-    ret
-
-#========================================================================================================================================
-# Inicialização do Sistema de Interrupções
-#========================================================================================================================================
-init_interrupts:
-    # Preservar registradores
-    addi    sp, sp, -12
-    stw     ra, 8(sp)
-    stw     r16, 4(sp)
-    stw     r17, 0(sp)
     
-    # Configurar botões para interrupção
-    call    _interrupts
-    
-    # Restaurar registradores
-    ldw     r17, 0(sp)
-    ldw     r16, 4(sp)
-    ldw     ra, 8(sp)
-    addi    sp, sp, 12
     ret
 
 #========================================================================================================================================
@@ -127,9 +109,10 @@ init_interrupts:
 #========================================================================================================================================
 print_string:
     # Preservar registradores (Stack Frame)
-    addi    sp, sp, -16
-    stw     ra, 12(sp)
-    stw     r16, 8(sp)
+    addi    sp, sp, -20
+    stw     ra,  16(sp)
+    stw     r16, 12(sp)
+    stw     r15, 8(sp)
     stw     r17, 4(sp)
     stw     r18, 0(sp)
     
@@ -142,9 +125,9 @@ print_loop:
     
     # Aguardar espaço no buffer de transmissão
 wait_tx_ready:
-    ldwio   r16, UART_CONTROL(r17)
-    andhi   r16, r16, UART_WSPACE      # Verificar bits 31-16 (write space)
-    beq     r16, r0, wait_tx_ready
+    ldwio   r19, UART_CONTROL(r17)
+    andhi   r19, r19, 0xFFFF      # Verificar bits 31-16 (write space)
+    beq     r19, r0, wait_tx_ready
     
     # Enviar caractere
     stwio   r18, UART_DATA(r17)
@@ -157,8 +140,9 @@ print_done:
     ldw     r18, 0(sp)
     ldw     r17, 4(sp)
     ldw     r16, 8(sp)
-    ldw     ra, 12(sp)
-    addi    sp, sp, 16
+    ldw     r15, 12(sp)
+    ldw     ra,  16(sp)
+    addi    sp, sp, 20
     ret
 
 #========================================================================================================================================
@@ -358,7 +342,6 @@ MSG_INVALID:
 .asciz "Comando invalido!\r\n"
 
 # Buffer para comando
-.align 4
 CMD_BUFFER:
 .skip 16
 
