@@ -82,10 +82,11 @@ led_on:
     
 led_off:
     # Apagar LED: estado_atual &= ~(1 << número_do_LED)
-    nor     r19, r19, r0        # r19 = ~r19 (inverte todos os bits)
+    movi    r19, 1
+    sll     r19, r19, r18       # r19 = 1 << número_do_LED
+    xori    r19, r19, 0xFFFF # r19 = ~(1 << número_do_LED)
     and     r21, r21, r19       # Atualizar o estado do LED (apagar o LED)
     br      led_update
-
     
 led_update:
     # Atualizar LEDs
