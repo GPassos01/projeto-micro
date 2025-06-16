@@ -47,6 +47,18 @@ _animacao:
     stw     r19, 0(sp)          # Registrador de trabalho
     
     mov     r16, r4             # r16 = buffer do comando
+
+    movia r8, 0x10002000 #status register 
+
+    movia r9, 10000000
+    andi r10, r9, 0xFFFF #filtra os 16 bits inferiores
+    stwio r10, 8(r8) #escreve na parte baixa
+
+    srli r9, r9, 16 #filtrando os 16 bits superiores
+    stwio r9, 12(r8) #escreve na parte alta
+
+    movi r9, 0b111
+    stwio r9, 4(r8) #habilita e começa a contar
     
     ldw     r19, 0(sp)
     ldw     r18, 4(sp)
