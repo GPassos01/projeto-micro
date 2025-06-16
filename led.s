@@ -55,7 +55,7 @@ _led:
     
     # Validar dígito da unidade
     bltu    r19, r0, led_error # Se for < 0, erro
-    movi    r20, 7             # número máximo da unidade
+    movi    r20, 9              # número máximo da unidade
     bgtu    r19, r20, led_error # Se for > 9, erro
     
     # Calcular número final do LED
@@ -71,8 +71,8 @@ _led:
     
     # Verificar operação
     beq     r17, r0, led_on     # Se operação = 0, acender LED
-    movi    r19, 1
-    beq     r17, r19, led_off   # Se operação = 1, apagar LED
+    movi    r20, 1              # Usar r20 temporariamente para comparação
+    beq     r17, r20, led_off   # Se operação = 1, apagar LED
     br      led_error
     
 led_on:
