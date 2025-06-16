@@ -55,8 +55,8 @@ _led:
     
     # Validar dígito da unidade
     bltu    r19, r0, led_error # Se for < 0, erro
-    movi    r20, 7             # número máximo da unidade
-    bgtu    r19, r20, led_error # Se for > 7, erro
+    movi    r20, 9              # número máximo da unidade
+    bgtu    r19, r20, led_error # Se for > 9, erro
     
     # Calcular número final do LED
     add     r18, r18, r19       # r18 = dezena*10 + unidade
@@ -71,8 +71,8 @@ _led:
     
     # Verificar operação
     beq     r17, r0, led_on     # Se operação = 0, acender LED
-    movi    r19, 1
-    beq     r17, r19, led_off   # Se operação = 1, apagar LED
+    movi    r20, 1              # Usar r20 temporariamente para comparação
+    beq     r17, r20, led_off   # Se operação = 1, apagar LED
     br      led_error
     
 led_on:
@@ -82,13 +82,8 @@ led_on:
     
 led_off:
     # Apagar LED: estado_atual &= ~(1 << número_do_LED)
-    movi    r19, 1
-    sll     r19, r19, r18           # r19 = 1 << número_do_LED
-    
-    # Inverter a máscara (para apagar o LED, precisamos de ~r19)
-    xori    r19, r19, 0xFFFF    # Inverte todos os bits de r19
-    
-    and     r21, r21, r19           # Atualizar o estado do LED (apagar o LED)
+    nor     r19, r19, r0        # r19 = ~r19 (inverte todos os bits)
+    and     r21, r21, r19       # Atualizar o estado do LED (apagar o LED)
     br      led_update
 
     
