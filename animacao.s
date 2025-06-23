@@ -1,17 +1,46 @@
 .global _animacao
+
+.equ FLAG_INTERRUPCAO, 0x100004f8 # Endereço absoluto, ajuste se necessário
+.equ ANIMATION_STATE,  0x100004fc # Endereço absoluto, ajuste se necessário
+.equ LED_BASE,         0x10000000
+
 _animacao:
-    addi        r9,     r9,  1 #0p 00
+    # O registrador r9 ainda aponta para a string de comando.
+    # Avança para o segundo caractere (a sub-opção '0' ou '1').
+    addi        r9, r9, 1
+    ldb         r10, (r9)       # r10 = sub-opção
 
-    ldb         r10,    (r9) #guarda opção -> inicia animação: 0x30 | para animação: 0x31
-    subi		r10,	r10, 0x30
+    # Compara a sub-opção com '0' (ASCII 0x30).
+    movi        r11, '0'
+    beq         r10, r11, INICIAR_ANIMACAO
 
-    beq         r10,    r0,  INICIAR_ANIMACAO
+    # Se não for '0', assume que é para parar.
+PARAR_ANIMACAO:
+    # Zera a flag de interrupção para parar de chamar a lógica da animação.
+    movia       r10, FLAG_INTERRUPCAO
+    stw         r0, (r10)
 
-#PARAR ANIMACAO
+    # Apaga todos os LEDs.
+    movia       r10, LED_BASE
+    stwio       r0, (r10)
+
+    # Reseta o estado da animação para o início.
+    movia       r10, ANIMATION_STATE
+    movi        r11, 1
+    stw         r11, (r10)
+    br          FIM_ANIMACAO
 
 INICIAR_ANIMACAO:
+    # Reseta a animação para o estado inicial (primeiro LED aceso).
+    movia		r10, ANIMATION_STATE
+    movi        r11, 1
+    stw         r11, (r10)
+    stwio       r11, (LED_BASE) # Acende o primeiro LED imediatamente
 
-    movia		r10,	FLAG_INTERRUPCAO 
-    movi		r11,		1    
-    stw		    r11,	(r10)
-ret
+    # Define a flag para 1, ativando a animação na ISR do timer.
+    movia		r10, FLAG_INTERRUPCAO
+    movi		r11, 1
+    stw		    r11, (r10)
+
+FIM_ANIMACAO:
+    ret

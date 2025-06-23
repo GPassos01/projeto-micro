@@ -1,64 +1,155 @@
-.org		0x20
+.global INTERRUPCAO_HANDLER
+
+.equ TIMER_BASE,	0x10002000
 .equ SW_BASE,		0x10000040
+.equ LED_BASE,         0x10000000
 
-# EXCEPTIONS HANDLER
-    rdctl		et,		ipending                    # verifica se houve interrupcao externa
-    beq         et,     r0,     OTHER_EXCEPTIONS    # se 0, checa excecoes
-    subi        ea,     ea,     4                   # interrupcao de hardware, decrementa ea
+# Rotina de tratamento de exceções
+INTERRUPCAO_HANDLER:
+    # Salva o contexto dos registradores na pilha
+    subi    sp, sp, 128
+    stw     ra, 0(sp)
+    stw     fp, 4(sp)
+    stw     r1, 8(sp)
+    stw     r2, 12(sp)
+    stw     r3, 16(sp)
+    stw     r4, 20(sp)
+    stw     r5, 24(sp)
+    stw     r6, 28(sp)
+    stw     r7, 32(sp)
+    stw     r8, 36(sp)
+    stw     r9, 40(sp)
+    stw     r10, 44(sp)
+    stw     r11, 48(sp)
+    stw     r12, 52(sp)
+    stw     r13, 56(sp)
+    stw     r14, 60(sp)
+    stw     r15, 64(sp)
+    rdctl   r16, estatus
+    stw     r16, 68(sp)
+    stw     ea, 72(sp)
 
-    andi        r13,    et,     1                   # checa se irq1 ta acionado
-    beq         r13,    r0,     CHECK_BUTTON        # se não, checa outras interrupcoes externas
-    call		TIMER                               # se sim, vai para IRQ1
-    
+
+    rdctl		et, ipending                    # Verifica se houve interrupcao externa
+    beq         et, r0, OTHER_EXCEPTIONS        # Se 0, não é interrupção de HW
+
+    # É uma interrupção de hardware, decrementa o endereço de retorno
+    subi        ea, ea, 4
+
+CHECK_TIMER:
+    andi        r13, et, 1                   # Verifica se a IRQ0 (timer) está ativa
+    beq         r13, r0, CHECK_BUTTON        # Se não, checa outras interrupções
+    call		TIMER_ISR                    # Se sim, chama a ISR do Timer
+    br          END_HANDLER                  # Finaliza o tratamento
 
 CHECK_BUTTON:
-    andi        r13,    et,     2                   # checa se irq2
-    beq         r13,    r0,     OTHER_INTERRUPTS    # se não, checa outras interrupcoes externas
-    call        BUTTON
+    andi        r13, et, 2                   # Verifica se a IRQ1 (botão) está ativa
+    beq         r13, r0, OTHER_INTERRUPTS    # Se não, checa outras interrupções
+    call        BUTTON_ISR                   # Se sim, chama a ISR do Botão
+    br          END_HANDLER                  # Finaliza o tratamento
 
 
 OTHER_INTERRUPTS:
     br          END_HANDLER
+
 OTHER_EXCEPTIONS:
+    # Aqui você poderia tratar outras exceções (e.g. syscall, instrução ilegal)
+    br          END_HANDLER
+
 END_HANDLER:
+    # Restaura o contexto da pilha
+    ldw     r16, 68(sp)
+    wrctl   estatus, r16
+    ldw     ea, 72(sp)
+    ldw     ra, 0(sp)
+    ldw     fp, 4(sp)
+    ldw     r1, 8(sp)
+    ldw     r2, 12(sp)
+    ldw     r3, 16(sp)
+    ldw     r4, 20(sp)
+    ldw     r5, 24(sp)
+    ldw     r6, 28(sp)
+    ldw     r7, 32(sp)
+    ldw     r8, 36(sp)
+    ldw     r9, 40(sp)
+    ldw     r10, 44(sp)
+    ldw     r11, 48(sp)
+    ldw     r12, 52(sp)
+    ldw     r13, 56(sp)
+    ldw     r14, 60(sp)
+    ldw     r15, 64(sp)
+    addi    sp, sp, 128
+
     eret
-    
-.org		    0x100
 
-TIMER:
-    movi    r15,    1
-    movia   r14,    FLAG_INTERRUPCAO    
-    ldw		r14,	(r14)
-    beq     r14,    r15, TRATAR_ANIMACAO   
+# ISR do Timer
+TIMER_ISR:
+    # Limpa o flag de interrupção do timer escrevendo 1 no bit TO do registrador de status
+    movia   r13, TIMER_BASE
+    movi    r14, 1
+    stwio   r14, 0(r13)
 
-    addi    r15,    r15, 1
-    beq     r14,    r15, TRATAR_CRONOMETRO
-    br FIM_TIMER
+    # Lógica da ISR do Timer
+    movia   r14, FLAG_INTERRUPCAO
+    ldw		r15, (r14)
+    movi    r14, 1
+    beq     r15, r14, TRATAR_ANIMACAO
 
-        TRATAR_ANIMACAO:
-        #Saber se é esquerda direita ou direita esquerda
-        movia       r10,    SW_BASE
-        ldwio       r11,    (r10)
-        andi        r11,    r11,     1
-        beq         r11,    r0,     DIREITA_ESQUERDA
+    movi    r14, 2
+    beq     r15, r14, TRATAR_CRONOMETRO
+    br      FIM_TIMER_ISR
 
-        #ESQUERDA_DIREITA
-        br FIM_TIMER
+TRATAR_ANIMACAO:
+    # --- Lógica da Animação dos LEDs ---
+    # r10, r11, r12: Usados para a lógica.
 
-        DIREITA_ESQUERDA:         
+    # Carrega o estado atual da animação.
+    movia       r10, ANIMATION_STATE
+    ldw         r11, (r10)
 
-        
-        
-        br FIM_TIMER
+    # 1. Verifica a direção (baseado no Switch 0)
+    movia       r12, SW_BASE
+    ldwio       r13, (r12)
+    andi        r13, r13, 1         # Isola o bit 0 do switch
+    bne         r13, r0, DIREITA_ESQUERDA
 
-        TRATAR_CRONOMETRO:    
 
-        FIM_TIMER:
-        movia r13, 0x10002000
-        stwio r0, (r13)
+ESQUERDA_DIREITA:
+    # Desloca o bit para a esquerda (efeito de mover para a esquerda).
+    slli        r11, r11, 1
 
-        ret
+    # Se o bit "estourar" (passar do último LED), reinicia a animação.
+    movia       r12, 0b1000000000000000000 # Posição após o último LED (considerando 18 LEDs) 
+    bne         r11, r12, SALVAR_ESTADO_LED
+    movi        r11, 1          # Reinicia no primeiro LED
+    br          SALVAR_ESTADO_LED
 
-BUTTON:
+DIREITA_ESQUERDA:
+    # Desloca o bit para a direita (efeito de mover para a direita).
+    srli        r11, r11, 1
 
+    # Se o bit "sumir" (passar do primeiro LED), reinicia no último.
+    bne         r11, r0, SALVAR_ESTADO_LED
+    movi        r11, 0b1000000000000000000 # Reinicia no último LED (LED17)
+
+SALVAR_ESTADO_LED:
+    # Salva o novo estado da animação.
+    stw         r11, (r10)
+    # Atualiza os LEDs físicos.
+    movia       r12, LED_BASE
+    stwio       r11, (r12)
+    br          FIM_TIMER_ISR
+
+TRATAR_CRONOMETRO:
+    # Lógica para o cronômetro vai aqui
+    br FIM_TIMER_ISR
+
+FIM_TIMER_ISR:
+    movia r13, TIMER_BASE
+    stwio r0, (r13)
+    ret
+
+# ISR do Botão
+BUTTON_ISR:
+    # Lógica da ISR do Botão vai aqui
     ret
