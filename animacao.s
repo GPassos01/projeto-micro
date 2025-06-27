@@ -12,6 +12,7 @@
 .extern FLAG_INTERRUPCAO
 .extern ANIMATION_STATE  
 .extern LED_STATE             # Definido em main.s
+.extern CRONOMETRO_ATIVO      # Para verificar se cronômetro está ativo
 
 #========================================================================================================================================
 # Definições e Constantes
@@ -92,9 +93,20 @@ INICIAR_ANIMACAO:
 # PARADA DA ANIMAÇÃO
 #========================================================================================================================================
 PARAR_ANIMACAO:
-    # Para timer de forma robusta
-    call        PARAR_TIMER_ANIMACAO
+    # Verifica se cronômetro está ativo antes de parar timer
+    movia       r1, CRONOMETRO_ATIVO
+    ldw         r2, (r1)
+    bne         r2, r0, PARAR_APENAS_ANIMACAO
     
+    # Cronômetro não está ativo - pode parar timer completamente
+    call        PARAR_TIMER_ANIMACAO
+    br          FINALIZAR_PARADA_ANIMACAO
+    
+PARAR_APENAS_ANIMACAO:
+    # Cronômetro está ativo - não para timer, apenas desativa animação
+    # O timer continua rodando para o cronômetro
+    
+FINALIZAR_PARADA_ANIMACAO:
     # Desativa flag de animação
     movia       r1, FLAG_INTERRUPCAO
     stw         r0, (r1)

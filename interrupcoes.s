@@ -64,7 +64,7 @@ INTERRUPCAO_HANDLER:
     # Se apenas cronômetro: timer = 1s, precisa 1 tick = 1s
     
     # Verifica se animação também está ativa
-    movia   r8, ANIMATION_STATE
+    movia   r8, FLAG_INTERRUPCAO
     ldw     r9, (r8)
     bne     r9, r0, CRONOMETRO_E_ANIMACAO
     

@@ -15,6 +15,7 @@
 .extern CRONOMETRO_TICK_FLAG
 .extern ANIMATION_STATE
 .extern CRONOMETRO_CONTADOR_TICKS
+.extern FLAG_INTERRUPCAO
 
 #========================================================================================================================================
 # Definições e Constantes
@@ -109,9 +110,20 @@ INICIAR_CRONOMETRO:
     br          FIM_CRONOMETRO
 
 CANCELAR_CRONOMETRO:
-    # Para timer do cronômetro
-    call        PARAR_TIMER_SISTEMA
+    # Verifica se animação está ativa antes de parar timer
+    movia       r1, FLAG_INTERRUPCAO
+    ldw         r2, (r1)
+    bne         r2, r0, CANCELAR_APENAS_CRONOMETRO
     
+    # Animação não está ativa - pode parar timer completamente
+    call        PARAR_TIMER_SISTEMA
+    br          FINALIZAR_CANCELAMENTO
+    
+CANCELAR_APENAS_CRONOMETRO:
+    # Animação está ativa - não para timer, apenas desativa cronômetro
+    # O timer continua rodando para a animação
+    
+FINALIZAR_CANCELAMENTO:
     # Desativa cronômetro
     movia       r1, CRONOMETRO_ATIVO
     stw         r0, (r1)
@@ -122,6 +134,10 @@ CANCELAR_CRONOMETRO:
     
     # Limpa pausado
     movia       r1, CRONOMETRO_PAUSADO
+    stw         r0, (r1)
+    
+    # Zera contador de ticks
+    movia       r1, CRONOMETRO_CONTADOR_TICKS
     stw         r0, (r1)
     
     # Limpa displays
@@ -257,7 +273,7 @@ CONFIGURAR_TIMER_CRONOMETRO:
     stwio       r0, 4(r16)              # Control = 0
     
     # Verifica se animação está ativa para escolher período
-    movia       r1, ANIMATION_STATE
+    movia       r1, FLAG_INTERRUPCAO
     ldw         r2, (r1)
     bne         r2, r0, USAR_PERIODO_ANIMACAO
     
