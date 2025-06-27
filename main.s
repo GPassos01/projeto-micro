@@ -1,348 +1,523 @@
 #========================================================================================================================================
-# Projeto Microprocessadores: Nios II Assembly
-# Placa: DE2 - 115
-# Grupo: Gabriel Passos e Lucas Ferrarotto
-# 1 Semestre de 2025 - Integral
+# PROJETO MICROPROCESSADORES - NIOS II ASSEMBLY
+# Arquivo: main.s  
+# Descrição: Loop Principal e Gerenciamento de Comandos
+# ABI Compliant: Sim - Seguindo convenções rigorosas da ABI Nios II
+# Placa: DE2-115 (Cyclone IV)
+# Grupo: Gabriel Passos e Lucas Ferrarotto - 1º Semestre 2025
 #========================================================================================================================================
 
 .global _start
-.global UART_BASE, LED_BASE, HEX_BASE, SW_BASE, KEY_BASE
+
+# Referências para variáveis definidas em interrupcoes.s (compilado primeiro)
+.extern FLAG_INTERRUPCAO
+.extern TIMER_TICK_FLAG
+.extern CRONOMETRO_TICK_FLAG
+.extern CRONOMETRO_SEGUNDOS
+.extern CRONOMETRO_PAUSADO
+.extern CRONOMETRO_ATIVO
+.section .text
 
 #========================================================================================================================================
-# Definição dos endereços e constantes
+# Definição de Endereços e Constantes - Conforme Manual DE2-115
 #========================================================================================================================================
 
-# Endereços I/O
-.equ LED_BASE,      0x10000000    # LEDs vermelhos (18 LEDs: 0-17)
-.equ HEX_BASE,      0x10000020    # Displays 7-segmentos (HEX3-HEX0)
-.equ SW_BASE,       0x10000040    # Chaves (SW17-SW0)
-.equ KEY_BASE,      0x10000050    # Botões (KEY3-KEY0)
-.equ UART_BASE,     0x10001000    # UART - ENDEREÇO CORRIGIDO
+# --- Endereços de Periféricos (Memory-Mapped I/O) ---
+.equ LED_BASE,          0x10000000      # LEDs vermelhos (18 LEDs: 0-17)
+.equ HEX_BASE,          0x10000020      # Displays 7-segmentos (HEX3-0) em 32 bits
+.equ SW_BASE,           0x10000040      # Switches (SW17-0)
+.equ KEY_BASE,          0x10000050      # Botões (KEY3-0)
+.equ JTAG_UART_BASE,    0x10001000      # JTAG UART
+.equ TIMER_BASE,        0x10002000      # Timer do sistema
 
-# Offsets UART - CORRIGIDOS
-.equ UART_DATA,     0x0000        # Registrador de dados
-.equ UART_CONTROL,  0x0004        # Registrador de controle
+# --- Offsets para Registradores da JTAG UART ---
+.equ UART_DATA,         0               # Registrador de dados
+.equ UART_CONTROL,      4               # Registrador de controle
 
-# Máscaras UART
-.equ UART_WSPACE,   0xFFFF0000    # Write space available (bits 31-16)
-.equ UART_RVALID,   0x00008000    # Read valid (bit 15)
-.equ UART_DATA_MASK,0x000000FF    # Máscara para dados (bits 7-0)
+# --- Estados do Sistema ---
+.equ PARADO,            0
+.equ ATIVO,             1
 
-# Constantes
-.equ ENTER_CHAR,    10            # Caractere Enter (LF)
-.equ ASCII_0,       0x30          # '0' em ASCII
-.equ MAX_CMD_LEN,   10            # Tamanho máximo do comando
-
-# Estados do sistema
-.equ STOPPED,		0
-.equ STARTED,		1
+# --- Configurações de Timing ---
+.equ ANIMACAO_PERIODO,  10000000        # 200ms a 50MHz (10M ciclos)
+.equ CRONOMETRO_PERIODO, 50000000       # 1s a 50MHz (50M ciclos)
 
 #========================================================================================================================================
-# Programa Principal
+# Início do Programa
 #========================================================================================================================================
-
 _start:
-    movia sp, 0x2000
-    # Inicialização do sistema
-    call    init_system
+    # --- INICIALIZAÇÃO SISTEMA (ABI Compliant) ---
+    # Stack pointer para topo da memória (ABI requirement)
+    movia       sp, 0x0001FFFC          # Stack cresce para baixo
     
-    # Configurar sistema de interrupções
-    #call    init_interrupts
+    # Frame pointer inicial (ABI requirement)
+    mov         fp, sp
     
-main_loop:
-    # Mostrar prompt
-    movia   r4, MSG_PROMPT        # r4 = parâmetro para print_string
-    call    print_string
-    
-    # Ler comando
-    movia   r4, CMD_BUFFER        # r4 = buffer para comando
-    movi    r5, MAX_CMD_LEN       # r5 = tamanho máximo
-    call    read_command
-    
-    # Processar comando
-    movia   r4, CMD_BUFFER        # r4 = buffer do comando
-    call    parse_command
-    
-    br      main_loop
+    # Inicialização usando registradores caller-saved (r1-r15)
+    call        INICIALIZAR_SISTEMA
 
 #========================================================================================================================================
-# Inicialização do Sistema
+# Loop Principal: Imprimir Prompt, Ler e Processar Comando
 #========================================================================================================================================
-init_system:
-    # Preservar registradores (Stack Frame)
-    addi    sp, sp, -16
-    stw     ra, 12(sp) # ra = return address (r31)
-    stw     r16, 8(sp)
-    stw     r17, 4(sp)
-    stw     r18, 0(sp)
+MAIN_LOOP:
+    # --- 1. PROCESSA TICKS DE INTERRUPÇÃO (NÃO-BLOQUEANTE) ---
+    call        PROCESSAR_TICKS_SISTEMA
     
-    # Inicializar LEDs (todos apagados)
-    movia   r16, LED_BASE
-    stwio   r0, 0(r16)
+    # --- 2. PROCESSA ENTRADA DA UART (NÃO-BLOQUEANTE) ---
+    call        PROCESSAR_CHAR_UART
     
-    # Inicializar displays 7-seg (todos apagados)
-    movia   r17, HEX_BASE
-    stwio   r0, 0(r17)          # HEX3-HEX0
+    # Volta imediatamente para o início do loop para continuar o polling
+    br          MAIN_LOOP
+
+#========================================================================================================================================
+# INICIALIZAÇÃO DO SISTEMA - ABI COMPLIANT
+#========================================================================================================================================
+INICIALIZAR_SISTEMA:
+    # --- Stack Frame Prologue (ABI Standard) ---
+    subi        sp, sp, 8
+    stw         ra, 4(sp)                # Salva return address
+    stw         r16, 0(sp)               # Salva r16 (callee-saved)
     
-    # Limpar buffer de comando
-    movia   r18, CMD_BUFFER
-    movi    r16, MAX_CMD_LEN
-clear_buffer:
-    stb     r0, 0(r18)
-    addi    r18, r18, 1
-    subi    r16, r16, 1
-    bne     r16, r0, clear_buffer
+    # Inicializa LEDs (todos apagados)
+    movia       r16, LED_BASE
+    stwio       r0, (r16)
     
-    # Restaurar registradores
-    ldw     r18, 0(sp)
-    ldw     r17, 4(sp)
-    ldw     r16, 8(sp)
-    ldw     ra, 12(sp)
-    addi    sp, sp, 16
+    # Inicializa displays 7-segmentos (todos apagados)
+    movia       r16, HEX_BASE
+    stwio       r0, (r16)                # Limpa todos os 4 displays (0x00000000)
     
+    # Inicializa estado dos LEDs
+    movia       r16, LED_STATE
+    stw         r0, (r16)
+    
+    # --- Stack Frame Epilogue (ABI Standard) ---
+    ldw         r16, 0(sp)               # Restaura r16
+    ldw         ra, 4(sp)                # Restaura return address
+    addi        sp, sp, 8                # Libera stack
     ret
 
 #========================================================================================================================================
-# Função: print_string - Enviar string via UART
-# Parâmetros: 
-#       r4 = ponteiro para string (null-terminated)
+# PROCESSAMENTO DE TICKS DO SISTEMA
 #========================================================================================================================================
-print_string:
-    # Preservar registradores (Stack Frame)
-    addi    sp, sp, -20
-    stw     ra,  16(sp)
-    stw     r16, 12(sp)
-    stw     r15, 8(sp)
-    stw     r17, 4(sp)
-    stw     r18, 0(sp)
+PROCESSAR_TICKS_SISTEMA:
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 12
+    stw         ra, 8(sp)
+    stw         r16, 4(sp)
+    stw         r17, 0(sp)
     
-    mov     r16, r4             # r16 = ponteiro para string
-    movia   r17, UART_BASE      # r17 = base UART
+    # --- Verifica tick da animação ---
+    movia       r16, TIMER_TICK_FLAG
+    ldw         r17, (r16)
+    beq         r17, r0, CHECK_CRONOMETRO_TICK_FIX
     
-print_loop:
-    ldb     r18, 0(r16)         # Carregar próximo caractere
-    beq     r18, r0, print_done # Se '\0', terminar
+    # Limpa a flag e chama a função de atualização correta
+    stw         r0, (r16)
+    call        _update_animation_step
+    # Se animação processada, NÃO processa cronômetro (timer único)
+    br          TICKS_EXIT_FIX
     
-    # Aguardar espaço no buffer de transmissão
-wait_tx_ready:
-    ldwio   r19, UART_CONTROL(r17)
-    andhi   r19, r19, 0xFFFF      # Verificar bits 31-16 (write space)
-    beq     r19, r0, wait_tx_ready
+CHECK_CRONOMETRO_TICK_FIX:
+    # --- Verifica tick do cronômetro (apenas se animação não processada) ---
+    movia       r16, CRONOMETRO_TICK_FLAG
+    ldw         r17, (r16)
+    beq         r17, r0, TICKS_EXIT_FIX
     
-    # Enviar caractere
-    stwio   r18, UART_DATA(r17)
+    # Limpa flag e processa cronômetro
+    stw         r0, (r16)
+    call        PROCESSAR_TICK_CRONOMETRO
     
-    addi    r16, r16, 1         # Próximo caractere
-    br      print_loop
-    
-print_done:
-    # Restaurar registradores (Stack Frame)
-    ldw     r18, 0(sp)
-    ldw     r17, 4(sp)
-    ldw     r16, 8(sp)
-    ldw     r15, 12(sp)
-    ldw     ra,  16(sp)
-    addi    sp, sp, 20
+TICKS_EXIT_FIX:
+    # --- Stack Frame Epilogue ---
+    ldw         r17, 0(sp)
+    ldw         r16, 4(sp)
+    ldw         ra, 8(sp)
+    addi        sp, sp, 12
     ret
 
 #========================================================================================================================================
-# Função: read_command - Ler comando via UART
-# Parâmetros: 
-#       r4 = buffer
-#       r5 = tamanho máximo
+# IMPRESSÃO DE STRING VIA UART - ABI COMPLIANT
 #========================================================================================================================================
-read_command:
-    # Preservar registradores (Stack Frame)
-    addi    sp, sp, -20
-    stw     ra, 16(sp)
-    stw     r16, 12(sp)         # Buffer de entrada (parâmetro r4)
-    stw     r17, 8(sp)          # Tamanho máximo (parâmetro r5)  
-    stw     r18, 4(sp)          # Base UART
-    stw     r19, 0(sp)          # Índice atual
+IMPRIMIR_STRING:
+    # --- Stack Frame Prologue ---
+    # r4 = ponteiro para string (argumento 1 conforme ABI)
+    subi        sp, sp, 16
+    stw         ra, 12(sp)
+    stw         r16, 8(sp)               # String pointer
+    stw         r17, 4(sp)               # UART base
+    stw         r18, 0(sp)               # Char atual
     
-    mov     r16, r4             # r16 = buffer de entrada
-    mov     r17, r5             # r17 = tamanho máximo
-    movia   r18, UART_BASE      # r18 = base UART
-    mov     r19, r0             # r19 = índice atual
+    mov         r16, r4                  # Copia argumento para callee-saved
+    movia       r17, JTAG_UART_BASE
     
-read_loop:
-    # Aguardar dados disponíveis
-wait_rx_ready:
-    ldwio   r4, UART_DATA(r18)
-    andi    r5, r4, UART_RVALID
-    beq     r5, r0, wait_rx_ready
+PRINT_LOOP:
+    # Carrega próximo caractere
+    ldb         r18, (r16)
+    beq         r18, r0, PRINT_EXIT      # Se null terminator, sai
     
-    # Extrair dados (bits 7-0)
-    andi    r4, r4, UART_DATA_MASK
+WAIT_UART_READY:
+    # Polling UART robusto com seções críticas
+    rdctl       r1, status               # Salva status (usando caller-saved)
+    wrctl       status, r0               # Desabilita interrupções
     
-    # Verificar se é Enter
-    movi    r5, ENTER_CHAR
-    beq     r4, r5, read_done
+    ldwio       r2, UART_CONTROL(r17)    # Lê controle UART
     
-    # Verificar limites do buffer
-    bge     r19, r17, read_loop # Ignorar se buffer cheio
+    wrctl       status, r1               # Restaura interrupções
     
-    # Armazenar caractere no buffer
-    add     r5, r16, r19        # Calcular endereço correto: buffer + índice
-    stb     r4, 0(r5)           # Armazenar caractere
-    addi    r19, r19, 1         # Incrementar índice
+    andhi       r2, r2, 0xFFFF           # Verifica WSPACE
+    beq         r2, r0, WAIT_UART_READY  # Se buffer cheio, espera
     
-    br      read_loop
+    # Escreve caractere atomicamente
+    rdctl       r1, status
+    wrctl       status, r0
+    stwio       r18, UART_DATA(r17)
+    wrctl       status, r1
     
-read_done:
-    # Adicionar terminador null
-    add     r4, r16, r19        # Calcular endereço: buffer + índice final
-    stb     r0, 0(r4)           # Adicionar '\0'
+    addi        r16, r16, 1              # Próximo caractere
+    br          PRINT_LOOP
     
-    # Restaurar registradores
-    ldw     r19, 0(sp)
-    ldw     r18, 4(sp)
-    ldw     r17, 8(sp)
-    ldw     r16, 12(sp)
-    ldw     ra, 16(sp)
-    addi    sp, sp, 20
+PRINT_EXIT:
+    # --- Stack Frame Epilogue ---
+    ldw         r18, 0(sp)
+    ldw         r17, 4(sp)
+    ldw         r16, 8(sp)
+    ldw         ra, 12(sp)
+    addi        sp, sp, 16
     ret
 
 #========================================================================================================================================
-# Função: parse_command - Analisar e executar comando
-# Parâmetros: r4 = buffer do comando
+# NOVA ROTINA DE PROCESSAMENTO DE CHAR (NÃO-BLOQUEANTE)
 #========================================================================================================================================
-parse_command:
-    # Preservar registradores (Stack Frame)
-    addi    sp, sp, -20
-    stw     ra, 16(sp)
-    stw     r16, 12(sp)
-    stw     r17, 8(sp)
-    stw     r18, 4(sp)
-    stw     r19, 0(sp)
+PROCESSAR_CHAR_UART:
+    # --- Stack Frame ---
+    subi        sp, sp, 12
+    stw         ra, 8(sp)
+    stw         r8, 4(sp)
+    stw         r9, 0(sp)
     
-    mov     r16, r4             # r16 = buffer do comando
+    movia       r8, JTAG_UART_BASE
+    ldwio       r9, UART_DATA(r8)       # Lê registrador de dados da UART
     
-    # Verificar se comando tem pelo menos 2 caracteres
-    ldb     r17, 0(r16)         # Primeiro dígito
-    beq     r17, r0, invalid_cmd
-    ldb     r18, 1(r16)         # Segundo dígito
-    beq     r18, r0, invalid_cmd
+    # Verifica se há um caractere válido (bit 15 RVALID)
+    andi        r8, r9, 0x8000
+    beq         r8, r0, FIM_PROCESSA_CHAR # Se não há caractere, retorna imediatamente
+
+    # Isola o caractere (8 bits inferiores)
+    andi        r9, r9, 0xFF
+
+    # Verifica se é Enter ou CR para finalizar o comando
+    movi        r8, 10                  # '\n'
+    beq         r9, r8, COMANDO_RECEBIDO
+    movi        r8, 13                  # '\r'
+    beq         r9, r8, COMANDO_RECEBIDO
+
+    # Armazena caractere no buffer
+    movia       r8, BUFFER_ENTRADA_POS
+    ldw         r10, (r8)               # Carrega ponteiro da posição atual
+    movia       r11, BUFFER_ENTRADA
+    add         r10, r10, r11           # Calcula endereço de armazenamento
+    stb         r9, (r10)               # Salva o caractere
+
+    # Incrementa a posição no buffer
+    movia       r8, BUFFER_ENTRADA_POS
+    ldw         r10, (r8)
+    addi        r10, r10, 1
+    stw         r10, (r8)
+    br          FIM_PROCESSA_CHAR
+
+COMANDO_RECEBIDO:
+    # Comando finalizado, processa
+    movia       r4, BUFFER_ENTRADA
+    call        PROCESSAR_COMANDO
     
-    # Validar caracteres ASCII ANTES da conversão (0x30-0x32 = '0'-'2') 
-    # Deve ser: 00, 01, 10, 11, 20, 21.
-    movi    r19, ASCII_0        # '0' = 0x30
-    bltu    r17, r19, invalid_cmd   # Se < '0', inválido
-    bltu    r18, r19, invalid_cmd   # Se < '0', inválido
+    # Limpa buffer e reseta posição para o próximo comando
+    call        LIMPAR_BUFFER
+    movia       r8, BUFFER_ENTRADA_POS
+    stw         r0, (r8)
     
-    movi    r19, 0x32           # '2' = 0x32
-    bgtu    r17, r19, invalid_cmd   # Se > '2', inválido
-    movi    r19, 0x31           # '1' = 0x31
-    bgtu    r18, r19, invalid_cmd   # Se > '1', inválido
-    
-    # Converter dígitos para número 
-    subi    r17, r17, ASCII_0   # Converter de ASCII
-    subi    r18, r18, ASCII_0
-    
-    # Calcular código do comando (dezena * 10 + unidade)
-    # Multiplicar r17 por 10 usando shifts: 10 = 8 + 2
-    slli    r19, r17, 3         # r19 = r17 * 8
-    slli    r17, r17, 1         # r17 = r17 * 2
-    add     r17, r19, r17       # r17 = r17*8 + r17*2 = r17*10
-    add     r17, r17, r18       # r17 = dezena*10 + unidade
-    
-    # Processar comando baseado no código
-    beq     r17, r0, cmd_led_control    # 00 - Controle de LED
-    movi    r18, 1
-    beq     r17, r18, cmd_led_control   # 01 - Controle de LED
-    movi    r18, 10
-    beq     r17, r18, cmd_animation     # 10 - Animação
-    movi    r18, 11
-    beq     r17, r18, cmd_animation     # 11 - Animação
-    movi    r18, 20
-    beq     r17, r18, cmd_timer         # 20 - Cronômetro
-    movi    r18, 21
-    beq     r17, r18, cmd_timer         # 21 - Cronômetro
-    
-    br      invalid_cmd
-    
-cmd_led_control:
-    mov     r4, r16             # Passar buffer completo
-    call    handle_led_command
-    br      parse_done
-    
-cmd_animation:
-    mov     r4, r16             # Passar buffer completo
-    call    handle_animation_command
-    br      parse_done
-    
-cmd_timer:
-    mov     r4, r16             # Passar buffer completo
-    call    handle_timer_command
-    br      parse_done
-    
-invalid_cmd:
-    movia   r4, MSG_INVALID
-    call    print_string
-    
-parse_done:
-    # Restaurar registradores
-    ldw     r19, 0(sp)
-    ldw     r18, 4(sp)
-    ldw     r17, 8(sp)
-    ldw     r16, 12(sp)
-    ldw     ra, 16(sp)
-    addi    sp, sp, 20
+    # Re-imprime o prompt para o próximo comando
+    movia       r4, MSG_PROMPT
+    call        IMPRIMIR_STRING
+
+FIM_PROCESSA_CHAR:
+    # --- Epílogo ---
+    ldw         r9, 0(sp)
+    ldw         r8, 4(sp)
+    ldw         ra, 8(sp)
+    addi        sp, sp, 12
     ret
 
 #========================================================================================================================================
-# Handlers de Comando - Stubs que chamam as funções específicas
+# PROCESSAMENTO DE COMANDOS - ABI COMPLIANT
 #========================================================================================================================================
+PROCESSAR_COMANDO:
+    # --- Stack Frame Prologue ---
+    # r4 = ponteiro para comando
+    subi        sp, sp, 12
+    stw         ra, 8(sp)
+    stw         r16, 4(sp)               # Command pointer
+    stw         r17, 0(sp)               # First char
+    
+    mov         r16, r4
+    ldb         r17, (r16)               # Primeiro caractere
+    
+    # Compara com comandos conhecidos
+    movi        r1, '0'
+    beq         r17, r1, CMD_LED
+    movi        r1, '1'  
+    beq         r17, r1, CMD_ANIMATION
+    movi        r1, '2'
+    beq         r17, r1, CMD_CRONOMETER
+    
+    # Comando inválido
+    br          CMD_EXIT
+    
+CMD_LED:
+    mov         r4, r16                  # Passa comando como argumento
+    call        _led
+    br          CMD_EXIT
 
-handle_led_command:
-    addi    sp, sp, -8
-    stw     ra, 4(sp)
-    stw     r16, 0(sp)
+CMD_ANIMATION:
+    mov         r4, r16
+    call        _animacao
+    br          CMD_EXIT
+
+CMD_CRONOMETER:
+    mov         r4, r16
+    call        _cronometro
     
-    call    _led
-    
-    ldw     r16, 0(sp)
-    ldw     ra, 4(sp)
-    addi    sp, sp, 8
+CMD_EXIT:
+    # --- Stack Frame Epilogue ---
+    ldw         r17, 0(sp)
+    ldw         r16, 4(sp)
+    ldw         ra, 8(sp)
+    addi        sp, sp, 12
     ret
 
-handle_animation_command:
-    addi    sp, sp, -8
-    stw     ra, 4(sp)
-    stw     r16, 0(sp)
+#========================================================================================================================================
+# ROTINAS DE SUPORTE PARA TICKS
+#========================================================================================================================================
+PROCESSAR_TICK_CRONOMETRO:
+    # --- Stack Frame Prologue (CRÍTICO!) ---
+    subi        sp, sp, 12
+    stw         ra, 8(sp)                # Salva return address
+    stw         r16, 4(sp)               # Registrador temporário
+    stw         r17, 0(sp)               # Registrador temporário
     
-    call    _animacao
+    # Verifica se cronômetro está ativo
+    movia       r16, CRONOMETRO_ATIVO
+    ldw         r17, (r16)
+    beq         r17, r0, TICK_CRONO_EXIT
     
-    ldw     r16, 0(sp)
-    ldw     ra, 4(sp)
-    addi    sp, sp, 8
-    ret
-
-handle_timer_command:
-    addi    sp, sp, -8
-    stw     ra, 4(sp)
-    stw     r16, 0(sp)
+    # Verifica se está pausado
+    movia       r16, CRONOMETRO_PAUSADO
+    ldw         r17, (r16)
+    bne         r17, r0, TICK_CRONO_EXIT
     
-    call    _cronometro
+    # Incrementa segundos
+    movia       r16, CRONOMETRO_SEGUNDOS
+    ldw         r17, (r16)
+    addi        r17, r17, 1
     
-    ldw     r16, 0(sp)
-    ldw     ra, 4(sp)
-    addi    sp, sp, 8
+    # Verifica overflow (99:59 = 5999 segundos)
+    movi        r1, 5999
+    ble         r17, r1, STORE_SECONDS
+    mov         r17, r0                   # Reset para 00:00
+    
+STORE_SECONDS:
+    stw         r17, (r16)
+    
+    # Atualiza displays
+    call        ATUALIZAR_DISPLAY_CRONOMETRO
+    
+TICK_CRONO_EXIT:
+    # --- Stack Frame Epilogue (CRÍTICO!) ---
+    ldw         r17, 0(sp)               # Restaura registradores
+    ldw         r16, 4(sp)
+    ldw         ra, 8(sp)                # Restaura return address
+    addi        sp, sp, 12               # Libera stack
     ret
 
 #========================================================================================================================================
-# Dados e Mensagens
+# ATUALIZAÇÃO DE DISPLAY DO CRONÔMETRO
 #========================================================================================================================================
+ATUALIZAR_DISPLAY_CRONOMETRO:
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 32
+    stw         ra, 28(sp)
+    stw         r16, 24(sp)              # Segundos totais
+    stw         r17, 20(sp)              # Contador para divisão
+    stw         r18, 16(sp)              # Resultado divisão
+    stw         r19, 12(sp)              # Valor final dos displays
+    stw         r20, 8(sp)               # Temp para cálculos
+    stw         r21, 4(sp)               # Temp para dígitos
+    stw         r22, 0(sp)               # Temp para shifts
+    
+    # Carrega segundos totais do cronômetro
+    movia       r1, CRONOMETRO_SEGUNDOS
+    ldw         r16, (r1)
+    
+    # === DIVISÃO MANUAL POR 10 (SEM USAR DIV) ===
+    # Implementa: dezenas = segundos / 10, unidades = segundos % 10
+    
+    mov         r17, r16                 # r17 = dividendo (segundos)
+    mov         r18, r0                  # r18 = quociente (dezenas)
+    
+    # Loop de divisão: subtrai 10 até não poder mais
+DIVISAO_LOOP:
+    movi        r1, 10
+    blt         r17, r1, DIVISAO_FIM     # Se < 10, termina
+    sub         r17, r17, r1             # Subtrai 10
+    addi        r18, r18, 1              # Incrementa quociente
+    br          DIVISAO_LOOP
+    
+DIVISAO_FIM:
+    # r18 = dezenas, r17 = unidades (resto)
+    
+    mov         r19, r0                  # Valor final = 0
+    
+    # === HEX3: SEMPRE 0 (bits 31-24) ===
+    mov         r4, r0
+    call        CODIFICAR_7SEG
+    slli        r22, r2, 24
+    or          r19, r19, r22
+    
+    # === HEX2: SEMPRE 0 (bits 23-16) ===
+    mov         r4, r0
+    call        CODIFICAR_7SEG
+    slli        r22, r2, 16
+    or          r19, r19, r22
+    
+    # === HEX1: DEZENAS DE SEGUNDOS (bits 15-8) ===
+    mov         r4, r18                  # Dezenas
+    call        CODIFICAR_7SEG
+    slli        r22, r2, 8
+    or          r19, r19, r22
+    
+    # === HEX0: UNIDADES DE SEGUNDOS (bits 7-0) ===
+    mov         r4, r17                  # Unidades
+    call        CODIFICAR_7SEG
+    or          r19, r19, r2
+    
+    # === ESCREVE NO HARDWARE ===
+    movia       r1, HEX_BASE
+    stwio       r19, (r1)               # Escreve todos os displays
+    
+    # --- Stack Frame Epilogue ---
+    ldw         r22, 0(sp)
+    ldw         r21, 4(sp)
+    ldw         r20, 8(sp)
+    ldw         r19, 12(sp)
+    ldw         r18, 16(sp)
+    ldw         r17, 20(sp)
+    ldw         r16, 24(sp)
+    ldw         ra, 28(sp)
+    addi        sp, sp, 32
+    ret
 
-.org    0x1000
-MSG_PROMPT:  
-.asciz "Entre com o comando: "
+#========================================================================================================================================
+# CODIFICAÇÃO PARA DISPLAY 7-SEGMENTOS
+#========================================================================================================================================
+CODIFICAR_7SEG:
+    # r4 = dígito (0-9), retorna em r2
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 8
+    stw         ra, 4(sp)
+    stw         r16, 0(sp)
+    
+    # Validação de entrada
+    movi        r1, 9
+    bgt         r4, r1, INVALID_DIGIT
+    blt         r4, r0, INVALID_DIGIT
+    
+    # Tabela de codificação 7-segmentos
+    movia       r16, TABELA_7SEG
+    slli        r1, r4, 2                # Multiplica por 4 (word)
+    add         r16, r16, r1
+    ldw         r2, (r16)                # Carrega código
+    br          CODIF_EXIT
+    
+INVALID_DIGIT:
+    movi        r2, 0x00                 # Display apagado
+    
+CODIF_EXIT:
+    # --- Stack Frame Epilogue ---
+    ldw         r16, 0(sp)
+    ldw         ra, 4(sp)
+    addi        sp, sp, 8
+    ret
 
-MSG_INVALID:
-.asciz "Comando invalido!\r\n"
+#========================================================================================================================================
+# Rotina para Limpar o Buffer
+#========================================================================================================================================
+LIMPAR_BUFFER:
+    movia       r8, BUFFER_ENTRADA
+    movi        r9, 100              # Tamanho do buffer
+LIMPAR_LOOP:
+    stb         r0, (r8)            # Escreve 0 na posição atual
+    addi        r8, r8, 1           # Avança para próxima posição
+    subi        r9, r9, 1           # Decrementa contador
+    bne         r9, r0, LIMPAR_LOOP # Continua se não zerou
+    ret
 
-# Buffer para comando
-CMD_BUFFER:
-.skip 16
+#========================================================================================================================================
+# Seção de Dados - ABI ALIGNED
+#========================================================================================================================================
+.section .data
+.align 4
+
+# Estado global dos LEDs
+.global LED_STATE
+LED_STATE:
+    .word 0
+
+# Buffer para entrada do usuário
+.global BUFFER_ENTRADA  
+BUFFER_ENTRADA:
+    .skip 100
+
+# Ponteiro para a posição atual no buffer de entrada
+.global BUFFER_ENTRADA_POS
+BUFFER_ENTRADA_POS:
+    .word 0
+
+# Tabela de codificação para displays 7-segmentos
+.global TABELA_7SEG
+TABELA_7SEG:
+    .word 0x3F    # 0
+    .word 0x06    # 1
+    .word 0x5B    # 2
+    .word 0x4F    # 3
+    .word 0x66    # 4
+    .word 0x6D    # 5
+    .word 0x7D    # 6
+    .word 0x07    # 7
+    .word 0x7F    # 8
+    .word 0x6F    # 9
+
+# Strings do sistema
+MSG_PROMPT:
+    .asciz "Entre com o comando: "
+
+MSG_CRONOMETRO_INICIADO:
+    .asciz "Cronometro iniciado!\n"
+
+MSG_CRONOMETRO_CANCELADO:
+    .asciz "Cronometro cancelado!\n"
+
+MSG_DEBUG_TEMPO:
+    .asciz "Tempo: %d segundos\n"
+
+# Declarações externas
+.global INTERRUPCAO_HANDLER
+.global IMPRIMIR_STRING
+.global MSG_CRONOMETRO_INICIADO
+.global MSG_CRONOMETRO_CANCELADO
+.global ATUALIZAR_DISPLAY_CRONOMETRO
+.global CODIFICAR_7SEG
+.extern _led
+.extern _animacao  
+.extern _cronometro
+.extern _update_animation_step
 
 .end
