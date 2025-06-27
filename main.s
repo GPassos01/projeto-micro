@@ -214,18 +214,21 @@ PROCESSAR_CHAR_UART:
     movi        r8, 13                  # '\r'
     beq         r9, r8, COMANDO_RECEBIDO
 
-    # Armazena caractere no buffer
+    # --- Armazena caractere de forma segura no buffer ---
     movia       r8, BUFFER_ENTRADA_POS
-    ldw         r10, (r8)               # Carrega ponteiro da posição atual
+    ldw         r10, (r8)               # r10 = posição atual
+
+    movi        r11, 99                 # Limite máximo (0-99)
+    bgt         r10, r11, FIM_PROCESSA_CHAR  # Se buffer cheio, descarta caractere
+
     movia       r11, BUFFER_ENTRADA
-    add         r10, r10, r11           # Calcula endereço de armazenamento
-    stb         r9, (r10)               # Salva o caractere
+    add         r12, r10, r11           # Endereço de armazenamento
+    stb         r9, (r12)               # Salva o caractere
 
     # Incrementa a posição no buffer
-    movia       r8, BUFFER_ENTRADA_POS
-    ldw         r10, (r8)
     addi        r10, r10, 1
     stw         r10, (r8)
+
     br          FIM_PROCESSA_CHAR
 
 COMANDO_RECEBIDO:
