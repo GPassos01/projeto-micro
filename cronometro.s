@@ -316,73 +316,7 @@ PARAR_TIMER_CRONOMETRO:
 # FUNÇÕES DE DISPLAY - ABI COMPLIANT
 #========================================================================================================================================
 
-#------------------------------------------------------------------------
-# Atualiza displays 7-segmentos com tempo do cronômetro
-# Formato: MM:SS (HEX3 HEX2 : HEX1 HEX0)
-#------------------------------------------------------------------------
-ATUALIZAR_DISPLAY_CRONOMETRO:
-    # --- Stack Frame Prologue ---
-    subi        sp, sp, 24
-    stw         ra, 20(sp)
-    stw         r16, 16(sp)             # Segundos totais
-    stw         r17, 12(sp)             # Minutos
-    stw         r18, 8(sp)              # Segundos restantes
-    stw         r19, 4(sp)              # HEX base
-    stw         r20, 0(sp)              # Dígito temporário
-    
-    # Carrega segundos totais
-    movia       r1, CRONOMETRO_SEGUNDOS
-    ldw         r16, (r1)
-    
-    movia       r19, HEX_BASE
-    
-    # Calcula minutos e segundos
-    movi        r1, 60
-    div         r17, r16, r1             # r17 = minutos
-    mul         r2, r17, r1              # r2 = minutos * 60
-    sub         r18, r16, r2             # r18 = segundos restantes
-    
-    # HEX3 (dezenas de minutos)
-    movi        r1, 10
-    div         r20, r17, r1             # r20 = dezenas de minutos
-    mov         r4, r20
-    call        CODIFICAR_7SEG
-    stwio       r2, HEX3_OFFSET(r19)     # HEX3
-    
-    # HEX2 (unidades de minutos)
-    movi        r1, 10
-    div         r2, r17, r1              # r2 = dezenas
-    mul         r2, r2, r1               # r2 = dezenas * 10
-    sub         r20, r17, r2             # r20 = unidades de minutos
-    mov         r4, r20
-    call        CODIFICAR_7SEG
-    stwio       r2, HEX2_OFFSET(r19)     # HEX2
-    
-    # HEX1 (dezenas de segundos)
-    movi        r1, 10
-    div         r20, r18, r1             # r20 = dezenas de segundos
-    mov         r4, r20
-    call        CODIFICAR_7SEG
-    stwio       r2, HEX1_OFFSET(r19)     # HEX1
-    
-    # HEX0 (unidades de segundos)
-    movi        r1, 10
-    div         r2, r18, r1              # r2 = dezenas
-    mul         r2, r2, r1               # r2 = dezenas * 10  
-    sub         r20, r18, r2             # r20 = unidades de segundos
-    mov         r4, r20
-    call        CODIFICAR_7SEG
-    stwio       r2, HEX0_OFFSET(r19)     # HEX0
-    
-    # --- Stack Frame Epilogue ---
-    ldw         r20, 0(sp)
-    ldw         r19, 4(sp)
-    ldw         r18, 8(sp)
-    ldw         r17, 12(sp)
-    ldw         r16, 16(sp)
-    ldw         ra, 20(sp)
-    addi        sp, sp, 24
-    ret
+# Função ATUALIZAR_DISPLAY_CRONOMETRO removida - usando a do main.s
 
 #------------------------------------------------------------------------
 # Limpa todos os displays 7-segmentos
@@ -407,38 +341,7 @@ LIMPAR_DISPLAYS:
     addi        sp, sp, 8
     ret
 
-#------------------------------------------------------------------------
-# Codifica dígito para display 7-segmentos
-# Entrada: r4 = dígito (0-9)
-# Saída: r2 = código 7-segmentos
-#------------------------------------------------------------------------
-CODIFICAR_7SEG:
-    # --- Stack Frame Prologue ---
-    subi        sp, sp, 8
-    stw         ra, 4(sp)
-    stw         r16, 0(sp)
-    
-    # Validação de entrada
-    movi        r1, 9
-    bgt         r4, r1, DIGITO_INVALIDO_7SEG
-    blt         r4, r0, DIGITO_INVALIDO_7SEG
-    
-    # Carrega código da tabela (usa a tabela global do main.s)
-    movia       r16, TABELA_7SEG
-    slli        r1, r4, 2                # Multiplica por 4 (word)
-    add         r16, r16, r1
-    ldw         r2, (r16)                # Carrega código
-    br          CODIF_7SEG_EXIT
-    
-DIGITO_INVALIDO_7SEG:
-    movi        r2, 0x00                 # Display apagado
-    
-CODIF_7SEG_EXIT:
-    # --- Stack Frame Epilogue ---
-    ldw         r16, 0(sp)
-    ldw         ra, 4(sp)
-    addi        sp, sp, 8
-    ret
+# Função CODIFICAR_7SEG removida - usando a do main.s
 
 #========================================================================================================================================
 # CONFIGURAÇÃO DE INTERRUPÇÕES - ABI COMPLIANT
@@ -468,4 +371,6 @@ CONFIGURAR_KEY1_INTERRUPCAO:
 .extern IMPRIMIR_STRING
 .extern MSG_CRONOMETRO_INICIADO
 .extern MSG_CRONOMETRO_CANCELADO
+.extern ATUALIZAR_DISPLAY_CRONOMETRO
+.extern CODIFICAR_7SEG
 

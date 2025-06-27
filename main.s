@@ -489,6 +489,11 @@ MSG_CRONOMETRO_CANCELADO:
 
 # Declarações externas
 .global INTERRUPCAO_HANDLER
+.global IMPRIMIR_STRING
+.global MSG_CRONOMETRO_INICIADO
+.global MSG_CRONOMETRO_CANCELADO
+.global ATUALIZAR_DISPLAY_CRONOMETRO
+.global CODIFICAR_7SEG
 .extern _led
 .extern _animacao  
 .extern _cronometro
