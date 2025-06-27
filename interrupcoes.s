@@ -10,88 +10,85 @@
 # O VETOR DE EXCEÇÕES FOI MOVIDO PARA O ARQUIVO 'vetores.s'
 # Este arquivo agora contém apenas a lógica da ISR e variáveis.
 
-# Rotina de tratamento de exceções - VERSÃO ULTRA-RÁPIDA
+# Rotina de tratamento de exceções - VERSÃO CORRIGIDA E ROBUSTA
 INTERRUPCAO_HANDLER:
-    # ✅ CONTEXTO MÍNIMO - NÃO salva EA (será modificado na ISR)
-    subi    sp, sp, 16
+    # ✅ CONTEXTO CORRIGIDO: Salva r8-r12 para proteger contra `movia`
+    subi    sp, sp, 32
     stw     ra, 0(sp)
     stw     r8, 4(sp)
     stw     r9, 8(sp)
+    stw     r10, 12(sp)
+    stw     r11, 16(sp)
+    stw     r12, 20(sp)
     rdctl   r8, estatus
-    stw     r8, 12(sp)
+    stw     r8, 24(sp)
+    # NÃO salvamos EA, ele será modificado diretamente.
 
-    # ✅ ISR ULTRA-RÁPIDA - Usa apenas r8 e r9 para máxima velocidade
-    rdctl   r8, ipending
-    beq     r8, r0, REABILITAR_INTERRUPCOES
-
-    # É interrupção de HW - ajusta ea
+    # É interrupção de HW, ajusta ea para retornar à instrução correta
     subi    ea, ea, 4
 
-    # Verifica se é timer (IRQ0) - apenas bit 0
-    andi    r9, r8, 1
-    beq     r9, r0, REABILITAR_INTERRUPCOES
+    # --- Início da lógica da ISR ---
     
-    # TIMER ISR INLINE - ULTRA-MINIMALISTA
+    # Verifica se é timer (IRQ0)
+    rdctl   r8, ipending
+    andi    r9, r8, 1
+    beq     r9, r0, END_HANDLER      # Se não for timer, apenas sai
+    
+    # É timer! Limpa flag TO - UMA VEZ APENAS!
     movia   r8, TIMER_BASE
     movi    r9, 1
-    stwio   r9, 0(r8)                # Limpa flag TO
+    stwio   r9, 0(r8)
     
-    # Verifica se animação está ativa (rápido)
+    # Verifica se animação está ativa
     movia   r8, FLAG_INTERRUPCAO
     ldw     r9, (r8)
-    beq     r9, r0, REABILITAR_INTERRUPCOES  # Se não há animação, sai
+    movi    r10, 1
+    bne     r9, r10, END_HANDLER     # Se não for animação, sai
     
-    # ANIMAÇÃO COM DIREÇÃO SW0 - otimizada mas funcional
+    # ANIMAÇÃO COM DIREÇÃO SW0
     movia   r8, ANIMATION_STATE
     ldw     r9, (r8)                 # Estado atual
     
-    # Lê direção do SW0 (rápido)
-    movia   r8, SW_BASE
-    ldwio   r8, (r8)
-    andi    r8, r8, 1               # Isola SW0
+    # Lê direção do SW0
+    movia   r10, SW_BASE
+    ldwio   r11, (r10)
+    andi    r11, r11, 1
     
     # Movimento baseado na direção
-    beq     r8, r0, MOVE_LEFT_RIGHT_FAST
+    beq     r11, r0, MOVE_LEFT_RIGHT
     
-MOVE_RIGHT_LEFT_FAST:
-    # SW0=1: Direita->Esquerda
-    srli    r9, r9, 1               
-    bne     r9, r0, UPDATE_LEDS_FAST
-    movia   r9, 0x20000             # Reset no LED 17 (bit 17)
-    br      UPDATE_LEDS_FAST
+MOVE_RIGHT_LEFT:
+    srli    r9, r9, 1               # Direita->Esquerda
+    bne     r9, r0, UPDATE_LEDS
+    movia   r9, 0x20000             # Reset no LED 17
+    br      UPDATE_LEDS
     
-MOVE_LEFT_RIGHT_FAST:
-    # SW0=0: Esquerda->Direita
-    slli    r9, r9, 1               
-    movia   r8, 0x40000             # 2^18 = limite
-    blt     r9, r8, UPDATE_LEDS_FAST
+MOVE_LEFT_RIGHT:
+    slli    r9, r9, 1               # Esquerda->Direita  
+    movia   r10, 0x40000
+    bne     r9, r10, UPDATE_LEDS
     movi    r9, 1                   # Reset no LED 0
     
-UPDATE_LEDS_FAST:
-    # ✅ ULTRA-RÁPIDO: Salva estado e atualiza LEDs
-    movia   r8, ANIMATION_STATE     # Recarrega endereço
+UPDATE_LEDS:
     stw     r9, (r8)                # Salva novo estado
-    movia   r8, LED_BASE            
-    stwio   r9, (r8)                # Atualiza LEDs
+    movia   r12, LED_BASE
+    stwio   r9, (r12)               # Atualiza LEDs
     
-    # ✅ CRÍTICO: Re-habilita interrupções (PIE=1)
-    movi    r9, 1
-    wrctl   status, r9              
-    br      END_HANDLER
-
-REABILITAR_INTERRUPCOES:
-    # ✅ NÃO re-habilita interrupções se animação não está ativa
-    # Isso evita interrupções residuais do timer
-    # As interrupções serão re-habilitadas apenas quando a animação iniciar novamente
-
 END_HANDLER:
-    # ✅ RESTAURA CONTEXTO - EA foi modificado durante ISR (mantém valor decrementado)
-    ldw     r8, 12(sp)
+    # ✅ CRÍTICO: Re-habilita interrupções ANTES de sair
+    movi    r9, 1
+    wrctl   status, r9
+
+    # ✅ Restaura contexto CORRIGIDO
+    ldw     r8, 24(sp)
     wrctl   estatus, r8
+    ldw     r12, 20(sp)
+    ldw     r11, 16(sp)
+    ldw     r10, 12(sp)
     ldw     r9, 8(sp)
     ldw     r8, 4(sp)
     ldw     ra, 0(sp)
-    addi    sp, sp, 16
+    addi    sp, sp, 32
 
     eret
 
