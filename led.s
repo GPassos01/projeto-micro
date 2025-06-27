@@ -36,54 +36,54 @@ _led:
     subi        sp, sp, 20
     stw         fp, 16(sp)
     stw         ra, 12(sp)
-    stw         r16, 8(sp)              # s0 - LED state
-    stw         r17, 4(sp)              # s1 - LED number
-    stw         r18, 0(sp)              # s2 - Operation
-    
+    stw         r16, 8(sp)              # s0 - current LED state
+    stw         r17, 4(sp)              # s1 - led number
+    stw         r18, 0(sp)              # s2 - temp/mask
     mov         fp, sp
-    
-    # --- PARSING OTIMIZADO (In-line) ---
-    
-    # Extrai Operação (char na posição 1, ex: "01xx")
-    ldb         r18, 1(r4)              # Carrega '1'
-    subi        r18, r18, ASCII_ZERO    # r18 = 1 (operação)
 
-    # Extrai Dezena do LED (char na posição 2, ex: "01xx")
-    ldb         r17, 2(r4)              # Carrega 'x' dezena
-    subi        r17, r17, ASCII_ZERO    
-    movi        r1, 10
-    mul         r17, r17, r1            # r17 = dezena * 10
+    # --- PARSING OTIMIZADO E LÓGICA ---
+    
+    # Carrega o estado atual dos LEDs da nossa variável de controle
+    movia       r18, LED_STATE
+    ldw         r16, (r18)
 
-    # Extrai Unidade do LED (char na posição 3, ex: "01xx")
-    ldb         r1, 3(r4)               # Carrega 'x' unidade
+    # 1. Parseia o número do LED (xx)
+    # Extrai a dezena (char na posição 2)
+    ldb         r17, 2(r4)
+    subi        r17, r17, ASCII_ZERO
+    slli        r1, r17, 3              # r1 = dezena * 8
+    slli        r17, r17, 1             # r17 = dezena * 2
+    add         r17, r17, r1            # r17 = dezena * 10
+    
+    # Adiciona a unidade (char na posição 3)
+    ldb         r1, 3(r4)
     subi        r1, r1, ASCII_ZERO
-    add         r17, r17, r1            # r17 = (dezena * 10) + unidade
-    
-    # --- VALIDAÇÃO ---
+    add         r17, r17, r1            # r17 = (d*10) + u
+
+    # 2. Valida o número do LED
     movi        r1, LED_MAX
     bgt         r17, r1, FIM_LED        # Se LED > 17, sai
     blt         r17, r0, FIM_LED        # Se LED < 0, sai
     
-    # --- LÓGICA ---
-    movia       r1, LED_STATE
-    ldw         r16, (r1)               # Carrega estado atual
-    
-    beq         r18, r0, ACENDER_LED_OP
-    br          APAGAR_LED_OP
+    # 3. Cria a máscara de bit (ex: 1 << 5 para o LED 5)
+    movi        r18, 1
+    sll         r18, r18, r17           # r18 = máscara de bit
 
-ACENDER_LED_OP:
-    movi        r1, 1
-    sll         r1, r1, r17             # r1 = 1 << numero_do_led
-    or          r16, r16, r1            # Acende o bit
-    br          ATUALIZAR_ESTADO_LED
+    # 4. Determina a operação e a executa
+    ldb         r1, 1(r4)               # Carrega o caractere da operação ('0' ou '1')
+    subi        r1, r1, ASCII_ZERO
+    beq         r1, r0, ACENDER_LED_OP  # Se for '0', vai para ACENDER
 
 APAGAR_LED_OP:
-    movi        r1, 1
-    sll         r1, r1, r17
-    nor         r1, r1, r1
-    and         r16, r16, r1            # Apaga o bit
+    nor         r18, r18, r18           # Inverte a máscara para limpar o bit
+    and         r16, r16, r18           # state = state & ~mask
+    br          ATUALIZAR_ESTADO_LED
+
+ACENDER_LED_OP:
+    or          r16, r16, r18           # state = state | mask
 
 ATUALIZAR_ESTADO_LED:
+    # Atualiza tanto os LEDs físicos quanto a nossa variável de estado
     movia       r1, LED_BASE
     stwio       r16, (r1)
     movia       r1, LED_STATE
