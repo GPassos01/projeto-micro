@@ -24,102 +24,47 @@
 # Segue rigorosamente as convenções da ABI do Nios II
 #========================================================================================================================================
 INTERRUPCAO_HANDLER:
-    # --- PRÓLOGO: Salvar Contexto Completo (ABI Compliant) ---
-    # Salva TODOS os registradores caller-saved conforme ABI
-    subi    sp, sp, 60                # Aloca espaço para 15 registradores
-    stw     r1, 0(sp)                 # Salva registradores de argumentos/retorno
-    stw     r2, 4(sp)
-    stw     r3, 8(sp)
-    stw     r4, 12(sp)                # Salva registradores de argumentos
-    stw     r5, 16(sp)
-    stw     r6, 20(sp)
-    stw     r7, 24(sp)
-    stw     r8, 28(sp)                # Salva registradores temporários
-    stw     r9, 32(sp)
-    stw     r10, 36(sp)
-    stw     r11, 40(sp)
-    stw     r12, 44(sp)
-    stw     r13, 48(sp)
-    stw     r14, 52(sp)
-    stw     r15, 56(sp)
+    # --- PRÓLOGO (Otimizado) ---
+    subi    sp, sp, 20
+    stw     ra, 16(sp)
+    stw     r8, 12(sp)
+    stw     r9, 8(sp)
+    stw     r10, 4(sp)
+    rdctl   r10, estatus
+    stw     r10, 0(sp)
     
-    # Salva registradores de controle
-    rdctl   r1, estatus               # Salva status em r1 temporariamente
-    
-    # Para interrupções de hardware, ajusta ea
+    # Decrementa ea para interrupções de hardware
     subi    ea, ea, 4
 
-    # --- LÓGICA DA ISR ---
-    # Identifica fonte da interrupção lendo status do timer
-    movia   r2, TIMER_BASE
-    ldwio   r3, 0(r2)                 # Lê status do timer
-    andi    r4, r3, 1                 # Isola bit TO (timeout)
+    # --- LÓGICA DA ISR (SIMPLIFICADA E ROBUSTA) ---
     
-    beq     r4, r0, ISR_EXIT          # Se não é timeout do timer, sai
+    # 1. Verifica se a interrupção veio do timer
+    movia   r8, TIMER_BASE
+    ldwio   r9, 0(r8)               # Lê registrador de status do timer
+    andi    r9, r9, 1               # Isola o bit TO (timeout)
+    beq     r9, r0, ISR_EXIT_FIX    # Se não for timeout, é outra interrupção. Sai.
     
-    # Limpa flag de timeout do timer
-    movi    r5, 1
-    stwio   r5, 0(r2)                 # Escreve 1 para limpar TO
+    # 2. Limpa a interrupção no hardware (CRÍTICO!)
+    # Escreve 1 no bit TO para zerá-lo.
+    movi    r9, 1
+    stwio   r9, 0(r8)
     
-    # Verifica qual timer está ativo baseado na configuração
-    ldwio   r6, 4(r2)                 # Lê controle do timer
-    andi    r7, r6, 4                 # Isola bit ITO
-    beq     r7, r0, ISR_EXIT          # Se ITO=0, timer não está configurado
-    
-    # Determina tipo de interrupção baseado no período configurado
-    ldwio   r8, 8(r2)                 # Lê periodl
-    ldwio   r9, 12(r2)                # Lê periodh
-    
-    # Reconstrói período de 32 bits
-    slli    r9, r9, 16                # Shift periodh para posição alta
-    or      r10, r8, r9               # Combina em r10
-    
-    # Verifica se é animação (10M ciclos = 200ms) ou cronômetro (50M ciclos = 1s)
-    movia   r11, 10000000             # Período da animação
-    beq     r10, r11, TIMER_ANIMACAO
-    
-    movia   r11, 50000000             # Período do cronômetro
-    beq     r10, r11, TIMER_CRONOMETRO
-    
-    br      ISR_EXIT                  # Período desconhecido, sai
+    # 3. Sinaliza para o main loop que um tick ocorreu
+    # Seta AMBAS as flags. O main loop decidirá o que fazer.
+    movia   r8, TIMER_TICK_FLAG
+    stw     r9, (r8)
+    movia   r8, CRONOMETRO_TICK_FLAG
+    stw     r9, (r8)
 
-TIMER_ANIMACAO:
-    # Sinaliza tick da animação
-    movia   r12, TIMER_TICK_FLAG
-    movi    r13, 1
-    stw     r13, (r12)
-    br      ISR_EXIT
-
-TIMER_CRONOMETRO:
-    # Sinaliza tick do cronômetro
-    movia   r12, CRONOMETRO_TICK_FLAG
-    movi    r13, 1
-    stw     r13, (r12)
-    
-ISR_EXIT:
-    # --- EPÍLOGO: Restaurar Contexto Completo ---
-    # Restaura registradores de controle
-    wrctl   estatus, r1               # Restaura status
-    
-    # Restaura todos os registradores na ordem inversa
-    ldw     r15, 56(sp)
-    ldw     r14, 52(sp)
-    ldw     r13, 48(sp)
-    ldw     r12, 44(sp)
-    ldw     r11, 40(sp)
-    ldw     r10, 36(sp)
-    ldw     r9, 32(sp)
-    ldw     r8, 28(sp)
-    ldw     r7, 24(sp)
-    ldw     r6, 20(sp)
-    ldw     r5, 16(sp)
-    ldw     r4, 12(sp)
-    ldw     r3, 8(sp)
-    ldw     r2, 4(sp)
-    ldw     r1, 0(sp)
-    addi    sp, sp, 60                # Restaura stack pointer
-    
-    # Retorna da interrupção
+ISR_EXIT_FIX:
+    # --- EPÍLOGO ---
+    ldw     r10, 0(sp)
+    wrctl   estatus, r10
+    ldw     r10, 4(sp)
+    ldw     r9, 8(sp)
+    ldw     r8, 12(sp)
+    ldw     ra, 16(sp)
+    addi    sp, sp, 20
     eret
 
 #========================================================================================================================================
