@@ -346,8 +346,8 @@ ATUALIZAR_DISPLAY_CRONOMETRO:
     subi        sp, sp, 32
     stw         ra, 28(sp)
     stw         r16, 24(sp)              # Segundos totais
-    stw         r17, 20(sp)              # Minutos calculados
-    stw         r18, 16(sp)              # Segundos restantes
+    stw         r17, 20(sp)              # Contador para divisão
+    stw         r18, 16(sp)              # Resultado divisão
     stw         r19, 12(sp)              # Valor final dos displays
     stw         r20, 8(sp)               # Temp para cálculos
     stw         r21, 4(sp)               # Temp para dígitos
@@ -357,9 +357,22 @@ ATUALIZAR_DISPLAY_CRONOMETRO:
     movia       r1, CRONOMETRO_SEGUNDOS
     ldw         r16, (r1)
     
-    # === DEBUG SIMPLES: MOSTRA APENAS SEGUNDOS (SEM MINUTOS) ===
-    # Vamos mostrar os segundos nos 2 displays da direita (HEX1 HEX0)
-    # E deixar os da esquerda zerados (HEX3 HEX2)
+    # === DIVISÃO MANUAL POR 10 (SEM USAR DIV) ===
+    # Implementa: dezenas = segundos / 10, unidades = segundos % 10
+    
+    mov         r17, r16                 # r17 = dividendo (segundos)
+    mov         r18, r0                  # r18 = quociente (dezenas)
+    
+    # Loop de divisão: subtrai 10 até não poder mais
+DIVISAO_LOOP:
+    movi        r1, 10
+    blt         r17, r1, DIVISAO_FIM     # Se < 10, termina
+    sub         r17, r17, r1             # Subtrai 10
+    addi        r18, r18, 1              # Incrementa quociente
+    br          DIVISAO_LOOP
+    
+DIVISAO_FIM:
+    # r18 = dezenas, r17 = unidades (resto)
     
     mov         r19, r0                  # Valor final = 0
     
@@ -376,17 +389,13 @@ ATUALIZAR_DISPLAY_CRONOMETRO:
     or          r19, r19, r22
     
     # === HEX1: DEZENAS DE SEGUNDOS (bits 15-8) ===
-    movi        r1, 10
-    div         r21, r16, r1             # Dezenas
-    mov         r4, r21
+    mov         r4, r18                  # Dezenas
     call        CODIFICAR_7SEG
     slli        r22, r2, 8
     or          r19, r19, r22
     
     # === HEX0: UNIDADES DE SEGUNDOS (bits 7-0) ===
-    mul         r20, r21, r1             # dezenas * 10
-    sub         r21, r16, r20            # Unidades
-    mov         r4, r21
+    mov         r4, r17                  # Unidades
     call        CODIFICAR_7SEG
     or          r19, r19, r2
     
