@@ -53,7 +53,7 @@ INTERRUPCAO_HANDLER:
     movia   r8, FLAG_INTERRUPCAO
     ldw     r9, (r8)
     movi    r10, 1
-    bne     r9, r10, END_HANDLER     # Se não for animação, sai
+    bne     r9, r10, REABILITAR_INTERRUPCOES     # Se não for animação, re-habilita e sai
     
     # ANIMAÇÃO MINIMALISTA
     movia   r8, ANIMATION_STATE
@@ -83,11 +83,20 @@ UPDATE_LEDS:
     stw     r9, (r8)                # Salva novo estado
     movia   r12, LED_BASE           # ✅ USA r12, não sobrescreve r8!
     stwio   r9, (r12)               # Atualiza LEDs
+    
+    # ✅ CRÍTICO: Re-habilita interrupções conforme aula página 22
+    movi    r9, 1
+    wrctl   status, r9              # PIE = 1 (re-habilita interrupções)
     br      END_HANDLER
 
 OTHER_INTERRUPTS:
 OTHER_EXCEPTIONS:
     # Tratamento mínimo para outras exceções
+
+REABILITAR_INTERRUPCOES:
+    # ✅ SEMPRE re-habilita interrupções antes de sair (conforme aula)
+    movi    r9, 1
+    wrctl   status, r9              # PIE = 1
 
 END_HANDLER:
     # Restaura contexto
