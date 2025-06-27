@@ -6,6 +6,8 @@
 # Funcionalidades: Iniciar (20), Cancelar (21), Pausar/Retomar (KEY1)
 #========================================================================================================================================
 
+.set noat                               # CRÍTICO: Impede uso automático de r1 (at)
+
 .global _cronometro
 
 # Referências para símbolos globais definidos em interrupcoes.s

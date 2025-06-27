@@ -5,6 +5,8 @@
 # ABI Compliant: Sim - Seguindo convenções rigorosas da ABI Nios II
 #========================================================================================================================================
 
+.set noat                               # CRÍTICO: Impede uso automático de r1 (at)
+
 .org 0x20
 
 .global INTERRUPCAO_HANDLER

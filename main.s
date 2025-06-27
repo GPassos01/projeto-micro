@@ -7,6 +7,8 @@
 # Grupo: Gabriel Passos e Lucas Ferrarotto - 1º Semestre 2025
 #========================================================================================================================================
 
+.set noat                               # CRÍTICO: Impede uso automático de r1 (at)
+
 .global _start
 
 # Referências para variáveis definidas em interrupcoes.s (compilado primeiro)
@@ -160,21 +162,21 @@ PRINT_LOOP:
     
 WAIT_UART_READY:
     # Polling UART robusto com seções críticas
-    rdctl       r1, status               # Salva status (usando caller-saved)
+    rdctl       r3, status               # Salva status (usando caller-saved)
     wrctl       status, r0               # Desabilita interrupções
     
     ldwio       r2, UART_CONTROL(r17)    # Lê controle UART
     
-    wrctl       status, r1               # Restaura interrupções
+    wrctl       status, r3               # Restaura interrupções
     
     andhi       r2, r2, 0xFFFF           # Verifica WSPACE
     beq         r2, r0, WAIT_UART_READY  # Se buffer cheio, espera
     
     # Escreve caractere atomicamente
-    rdctl       r1, status
+    rdctl       r3, status
     wrctl       status, r0
     stwio       r18, UART_DATA(r17)
-    wrctl       status, r1
+    wrctl       status, r3
     
     addi        r16, r16, 1              # Próximo caractere
     br          PRINT_LOOP
@@ -268,12 +270,12 @@ PROCESSAR_COMANDO:
     ldb         r17, (r16)               # Primeiro caractere
     
     # Compara com comandos conhecidos
-    movi        r1, '0'
-    beq         r17, r1, CMD_LED
-    movi        r1, '1'  
-    beq         r17, r1, CMD_ANIMATION
-    movi        r1, '2'
-    beq         r17, r1, CMD_CRONOMETER
+    movi        r2, '0'
+    beq         r17, r2, CMD_LED
+    movi        r2, '1'  
+    beq         r17, r2, CMD_ANIMATION
+    movi        r2, '2'
+    beq         r17, r2, CMD_CRONOMETER
     
     # Comando inválido
     br          CMD_EXIT
@@ -304,33 +306,46 @@ CMD_EXIT:
 # ROTINAS DE SUPORTE PARA TICKS
 #========================================================================================================================================
 PROCESSAR_TICK_CRONOMETRO:
+    # --- Stack Frame ---
+    subi        sp, sp, 16
+    stw         ra, 12(sp)
+    stw         r16, 8(sp)
+    stw         r17, 4(sp) 
+    stw         r18, 0(sp)
+    
     # Verifica se cronômetro está ativo
-    movia       r1, CRONOMETRO_ATIVO
-    ldw         r2, (r1)
-    beq         r2, r0, TICK_CRONO_EXIT
+    movia       r16, CRONOMETRO_ATIVO
+    ldw         r17, (r16)
+    beq         r17, r0, TICK_CRONO_EXIT
     
     # Verifica se está pausado
-    movia       r1, CRONOMETRO_PAUSADO
-    ldw         r2, (r1)
-    bne         r2, r0, TICK_CRONO_EXIT
+    movia       r16, CRONOMETRO_PAUSADO
+    ldw         r17, (r16)
+    bne         r17, r0, TICK_CRONO_EXIT
     
     # Incrementa segundos
-    movia       r1, CRONOMETRO_SEGUNDOS
-    ldw         r2, (r1)
-    addi        r2, r2, 1
+    movia       r16, CRONOMETRO_SEGUNDOS
+    ldw         r17, (r16)
+    addi        r17, r17, 1
     
     # Verifica overflow (99:59 = 5999 segundos)
-    movi        r3, 5999
-    ble         r2, r3, STORE_SECONDS
-    mov         r2, r0                   # Reset para 00:00
+    movi        r18, 5999
+    ble         r17, r18, STORE_SECONDS
+    mov         r17, r0                   # Reset para 00:00
     
 STORE_SECONDS:
-    stw         r2, (r1)
+    stw         r17, (r16)
     
     # Atualiza displays
     call        ATUALIZAR_DISPLAY_CRONOMETRO
     
 TICK_CRONO_EXIT:
+    # --- Stack Frame Epilogue ---
+    ldw         r18, 0(sp)
+    ldw         r17, 4(sp)
+    ldw         r16, 8(sp)
+    ldw         ra, 12(sp)
+    addi        sp, sp, 16
     ret
 
 #========================================================================================================================================
@@ -346,50 +361,50 @@ ATUALIZAR_DISPLAY_CRONOMETRO:
     stw         r19, 0(sp)               # Dígito atual
     
     # Carrega segundos totais
-    movia       r1, CRONOMETRO_SEGUNDOS
-    ldw         r16, (r1)
+    movia       r20, CRONOMETRO_SEGUNDOS  # Usando r20 temporário
+    ldw         r16, (r20)
     
     # Calcula minutos e segundos
-    movi        r1, 60
-    div         r17, r16, r1             # Minutos
-    mul         r2, r17, r1
+    movi        r20, 60
+    div         r17, r16, r20             # Minutos
+    mul         r2, r17, r20
     sub         r18, r16, r2             # Segundos restantes
     
     # Display HEX3 (dezenas de minutos)
-    movi        r1, 10
-    div         r19, r17, r1
+    movi        r20, 10
+    div         r19, r17, r20
     mov         r4, r19
     call        CODIFICAR_7SEG
-    movia       r1, HEX_BASE
-    stwio       r2, 12(r1)               # HEX3
+    movia       r20, HEX_BASE
+    stwio       r2, 12(r20)               # HEX3
     
     # Display HEX2 (unidades de minutos)
-    movi        r1, 10
-    div         r2, r17, r1
-    mul         r2, r2, r1
+    movi        r20, 10
+    div         r2, r17, r20
+    mul         r2, r2, r20
     sub         r19, r17, r2
     mov         r4, r19
     call        CODIFICAR_7SEG
-    movia       r1, HEX_BASE
-    stwio       r2, 8(r1)                # HEX2
+    movia       r20, HEX_BASE
+    stwio       r2, 8(r20)                # HEX2
     
     # Display HEX1 (dezenas de segundos)
-    movi        r1, 10
-    div         r19, r18, r1
+    movi        r20, 10
+    div         r19, r18, r20
     mov         r4, r19
     call        CODIFICAR_7SEG
-    movia       r1, HEX_BASE
-    stwio       r2, 4(r1)                # HEX1
+    movia       r20, HEX_BASE
+    stwio       r2, 4(r20)                # HEX1
     
     # Display HEX0 (unidades de segundos)
-    movi        r1, 10
-    div         r2, r18, r1
-    mul         r2, r2, r1
+    movi        r20, 10
+    div         r2, r18, r20
+    mul         r2, r2, r20
     sub         r19, r18, r2
     mov         r4, r19
     call        CODIFICAR_7SEG
-    movia       r1, HEX_BASE
-    stwio       r2, 0(r1)                # HEX0
+    movia       r20, HEX_BASE
+    stwio       r2, 0(r20)                # HEX0
     
     # --- Stack Frame Epilogue ---
     ldw         r19, 0(sp)
@@ -411,14 +426,14 @@ CODIFICAR_7SEG:
     stw         r16, 0(sp)
     
     # Validação de entrada
-    movi        r1, 9
-    bgt         r4, r1, INVALID_DIGIT
+    movi        r3, 9
+    bgt         r4, r3, INVALID_DIGIT
     blt         r4, r0, INVALID_DIGIT
     
     # Tabela de codificação 7-segmentos
     movia       r16, TABELA_7SEG
-    slli        r1, r4, 2                # Multiplica por 4 (word)
-    add         r16, r16, r1
+    slli        r3, r4, 2                # Multiplica por 4 (word)
+    add         r16, r16, r3
     ldw         r2, (r16)                # Carrega código
     br          CODIF_EXIT
     

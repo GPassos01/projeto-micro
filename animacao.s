@@ -5,6 +5,8 @@
 # ABI Compliant: Sim - Seguindo convenções rigorosas da ABI Nios II
 #========================================================================================================================================
 
+.set noat                               # CRÍTICO: Impede uso automático de r1 (at)
+
 .global _animacao
 .global _update_animation_step
 .extern FLAG_INTERRUPCAO
@@ -71,9 +73,9 @@ _animacao:
 #========================================================================================================================================
 INICIAR_ANIMACAO:
     # Verifica se animação já está ativa
-    movia       r1, FLAG_INTERRUPCAO
-    ldw         r2, (r1)
-    bne         r2, r0, ANIM_JA_ATIVA    # Se já ativa, não faz nada
+    movia       r2, FLAG_INTERRUPCAO
+    ldw         r3, (r2)
+    bne         r3, r0, ANIM_JA_ATIVA    # Se já ativa, não faz nada
     
     # Salva estado atual dos LEDs antes de iniciar animação
     call        SALVAR_ESTADO_LEDS
@@ -82,8 +84,8 @@ INICIAR_ANIMACAO:
     call        DETERMINAR_POSICAO_INICIAL
     
     # Se havia cronômetro em execução, desativa-o
-    movia       r1, CRONOMETRO_ATIVO
-    stw         r0, (r1)
+    movia       r2, CRONOMETRO_ATIVO
+    stw         r0, (r2)
     
     # Configura e inicia timer da animação
     movia       r4, ANIMACAO_PERIODO  # Argumento para a função
@@ -104,15 +106,15 @@ PARAR_ANIMACAO:
     call        PARAR_TIMER
     
     # Desativa flag de animação
-    movia       r1, FLAG_INTERRUPCAO
-    stw         r0, (r1)
+    movia       r2, FLAG_INTERRUPCAO
+    stw         r0, (r2)
     
     # Restaura estado anterior dos LEDs
     call        RESTAURAR_ESTADO_LEDS
     
     # Reseta estado da animação
-    movia       r1, ANIMATION_STATE
-    stw         r0, (r1)
+    movia       r2, ANIMATION_STATE
+    stw         r0, (r2)
 
 ANIM_JA_ATIVA:
     # Animação já estava ativa, não faz nada
@@ -145,8 +147,8 @@ _update_animation_step:
     mov         fp, sp
     
     # Carrega estado atual da animação
-    movia       r1, ANIMATION_STATE
-    ldw         r16, (r1)
+    movia       r2, ANIMATION_STATE
+    ldw         r16, (r2)
     
     # Lê direção do switch SW0
     call        LER_DIRECAO_SW0
@@ -167,20 +169,20 @@ MOVER_DIREITA_ESQUERDA:
 MOVER_ESQUERDA_DIREITA:
     # Move da esquerda para direita (LED 0->1->...->17->0)
     slli        r16, r16, 1             # Desloca bit para esquerda
-    movia       r1, 0x40000             # 2^18 (overflow)
-    bne         r16, r1, ATUALIZAR_LEDS_ANIM
+    movia       r2, 0x40000             # 2^18 (overflow)
+    bne         r16, r2, ATUALIZAR_LEDS_ANIM
     
     # Se passou do LED 17, volta para LED 0
     movi        r16, 1                  # 2^0 = LED 0
     
 ATUALIZAR_LEDS_ANIM:
     # Salva novo estado
-    movia       r1, ANIMATION_STATE
-    stw         r16, (r1)
+    movia       r2, ANIMATION_STATE
+    stw         r16, (r2)
     
     # Atualiza LEDs físicos
-    movia       r1, LED_BASE
-    stwio       r16, (r1)
+    movia       r2, LED_BASE
+    stwio       r16, (r2)
     
     # --- Stack Frame Epilogue ---
     ldw         r17, 0(fp)
