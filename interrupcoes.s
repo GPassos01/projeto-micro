@@ -85,9 +85,9 @@ OTHER_EXCEPTIONS:
     # Tratamento mínimo para outras exceções
 
 REABILITAR_INTERRUPCOES:
-    # ✅ SEMPRE re-habilita interrupções antes de sair (conforme aula)
-    movi    r9, 1
-    wrctl   status, r9              # PIE = 1
+    # ✅ NÃO re-habilita interrupções se animação não está ativa
+    # Isso evita interrupções residuais do timer
+    # As interrupções serão re-habilitadas apenas quando a animação iniciar novamente
 
 END_HANDLER:
     # Restaura contexto

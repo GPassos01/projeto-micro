@@ -115,10 +115,16 @@ INICIAR_TIMER_SIMPLES:
 PARAR_TIMER_SIMPLES:
     movia       r8, TIMER_BASE
     
-    # Limpa flag
+    # Para timer completamente PRIMEIRO
+    stwio       r0, 4(r8)
+    
+    # Limpa flag TO após parar
     movi        r9, 1
     stwio       r9, 0(r8)
     
-    # Para timer completamente
-    stwio       r0, 4(r8)
+    # ✅ CRÍTICO: Desabilita interrupções do timer (IRQ0)
+    wrctl       ienable, r0         # Zera ienable (desabilita todas as IRQs)
+    
+    # Desabilita interrupções globais para garantir parada total
+    wrctl       status, r0          # Zera PIE bit
     ret
