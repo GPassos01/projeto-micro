@@ -106,32 +106,31 @@ INICIALIZAR_SISTEMA:
 # PROCESSAMENTO DE TICKS DO SISTEMA
 #========================================================================================================================================
 PROCESSAR_TICKS_SISTEMA:
-    # --- Stack Frame Prologue ---
+    # --- Stack Frame ---
     subi        sp, sp, 12
     stw         ra, 8(sp)
     stw         r16, 4(sp)
     stw         r17, 0(sp)
     
-    # --- Verifica tick da animação ---
+    # Verifica a flag genérica do timer
     movia       r16, TIMER_TICK_FLAG
     ldw         r17, (r16)
-    beq         r17, r0, CHECK_CRONOMETRO_TICK_FIX
+    beq         r17, r0, FIM_TICKS # Se a flag não foi setada, não faz nada
     
-    # CORRIGIDO: Limpa a flag e chama a função de atualização correta
+    # Se chegou aqui, um tick ocorreu. Limpa a flag para o próximo.
     stw         r0, (r16)
-    call        _update_animation_step
-    
-CHECK_CRONOMETRO_TICK_FIX:
-    # --- Verifica tick do cronômetro ---
-    movia       r16, CRONOMETRO_TICK_FLAG
+
+    # Verifica se a ANIMAÇÃO está ativa
+    movia       r16, FLAG_INTERRUPCAO
     ldw         r17, (r16)
-    beq         r17, r0, TICKS_EXIT_FIX
-    
-    # Limpa flag e processa cronômetro (função de suporte mantida por complexidade)
-    stw         r0, (r16)
+    beq         r17, r0, PROCESSA_TICK_CRONOMETRO_ROBUSTO # Se não, pula para o cronômetro
+    call        _update_animation_step
+
+PROCESSA_TICK_CRONOMETRO_ROBUSTO:
+    # Verifica se o CRONÔMETRO está ativo
     call        PROCESSAR_TICK_CRONOMETRO
     
-TICKS_EXIT_FIX:
+FIM_TICKS:
     # --- Stack Frame Epilogue ---
     ldw         r17, 0(sp)
     ldw         r16, 4(sp)

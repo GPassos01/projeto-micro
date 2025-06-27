@@ -20,51 +20,37 @@
 .equ KEY_BASE,          0x10000050
 
 #========================================================================================================================================
-# ROTINA DE TRATAMENTO DE INTERRUPÇÕES - ABI COMPLIANT
-# Segue rigorosamente as convenções da ABI do Nios II
-#========================================================================================================================================
+# ROTINA DE TRATAMENTO DE INTERRUPÇÕES (VERSÃO FINAL E ROBUSTA)
 INTERRUPCAO_HANDLER:
-    # --- PRÓLOGO (Otimizado) ---
-    subi    sp, sp, 20
-    stw     ra, 16(sp)
-    stw     r8, 12(sp)
-    stw     r9, 8(sp)
-    stw     r10, 4(sp)
-    rdctl   r10, estatus
-    stw     r10, 0(sp)
+    # --- Prólogo Mínimo e Rápido ---
+    # Salva apenas os registradores que serão modificados nesta ISR
+    subi sp, sp, 12
+    stw  ra, 8(sp)
+    stw  r8, 4(sp)
+    stw  r9, 0(sp)
     
-    # Decrementa ea para interrupções de hardware
-    subi    ea, ea, 4
+    # --- Lógica Principal da ISR ---
 
-    # --- LÓGICA DA ISR (SIMPLIFICADA E ROBUSTA) ---
-    
-    # 1. Verifica se a interrupção veio do timer
-    movia   r8, TIMER_BASE
-    ldwio   r9, 0(r8)               # Lê registrador de status do timer
-    andi    r9, r9, 1               # Isola o bit TO (timeout)
-    beq     r9, r0, ISR_EXIT_FIX    # Se não for timeout, é outra interrupção. Sai.
-    
-    # 2. Limpa a interrupção no hardware (CRÍTICO!)
-    # Escreve 1 no bit TO para zerá-lo.
-    movi    r9, 1
-    stwio   r9, 0(r8)
-    
-    # 3. Sinaliza para o main loop que um tick ocorreu
-    # Seta AMBAS as flags. O main loop decidirá o que fazer.
-    movia   r8, TIMER_TICK_FLAG
-    stw     r9, (r8)
-    movia   r8, CRONOMETRO_TICK_FLAG
-    stw     r9, (r8)
+    # 1. Limpa a interrupção de hardware IMEDIATAMENTE.
+    # Esta é a operação mais crítica. Escreve 1 no bit TO (timeout) do
+    # registrador de status do timer para zerá-lo.
+    movia r8, TIMER_BASE
+    movi  r9, 1
+    stwio r9, 0(r8) 
 
-ISR_EXIT_FIX:
-    # --- EPÍLOGO ---
-    ldw     r10, 0(sp)
-    wrctl   estatus, r10
-    ldw     r10, 4(sp)
-    ldw     r9, 8(sp)
-    ldw     r8, 12(sp)
-    ldw     ra, 16(sp)
-    addi    sp, sp, 20
+    # 2. Sinaliza para o main loop que um tick ocorreu.
+    # Apenas a flag genérica é necessária, o main loop sabe o que fazer.
+    movia r8, TIMER_TICK_FLAG
+    stw   r9, (r8)
+    
+    # 3. Decrementa o Endereço da Exceção para retornar ao fluxo correto.
+    subi ea, ea, 4
+    
+    # --- Epílogo Mínimo ---
+    ldw  r9, 0(sp)
+    ldw  r8, 4(sp)
+    ldw  ra, 8(sp)
+    addi sp, sp, 12
     eret
 
 #========================================================================================================================================
