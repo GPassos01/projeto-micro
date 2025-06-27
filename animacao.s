@@ -1,8 +1,26 @@
 #========================================================================================================================================
 # PROJETO MICROPROCESSADORES - NIOS II ASSEMBLY  
 # Arquivo: animacao.s
-# Descrição: Sistema de Animação de LEDs com Timer
-# ABI Compliant: Sim - Seguindo convenções rigorosas da ABI Nios II
+# Descrição: Sistema de Animação Bidirecional de LEDs com Timer Inteligente
+# ABI Compliant: ✅ 100% - Seguindo convenções rigorosas da ABI Nios II
+#
+# FUNCIONALIDADES PRINCIPAIS:
+# - Animação bidirecional de LEDs (esquerda↔direita)
+# - Controle de direção via SW0 em tempo real
+# - Velocidade: 200ms por step (5 FPS)
+# - Preservação de estado dos LEDs manuais
+# - Timer compartilhado inteligente com cronômetro
+# - Reconfiguração dinâmica de período
+#
+# COMANDOS:
+# - "10" → Inicia animação (direção controlada por SW0)
+# - "11" → Para animação e restaura LEDs anteriores
+#
+# CONTROLE DE DIREÇÃO:
+# - SW0=0: Esquerda → Direita (LED 0→1→2→...→17→0)
+# - SW0=1: Direita → Esquerda (LED 17→16→15→...→0→17)
+#
+# AUTORES: Gabriel Passos e Lucas Ferrarotto - 1º Semestre 2025
 #========================================================================================================================================
 
 .global _animacao
@@ -20,22 +38,27 @@
 .extern CRONOMETRO_ATIVO      # Para verificar se cronômetro está ativo
 
 #========================================================================================================================================
-# Definições e Constantes
+# Definições e Constantes - Hardware DE2-115
 #========================================================================================================================================
-.equ LED_BASE,              0x10000000
-.equ SW_BASE,               0x10000040
-.equ TIMER_BASE,            0x10002000
+.equ LED_BASE,              0x10000000      # LEDs vermelhos (18 LEDs: 0-17)
+.equ SW_BASE,               0x10000040      # Switches para controle
+.equ TIMER_BASE,            0x10002000      # Timer do sistema
 
-# Configurações de timing
-.equ ANIMACAO_PERIODO,      10000000        # 200ms a 50MHz (10M ciclos)
+# Configurações de timing otimizadas
+.equ ANIMACAO_PERIODO,      10000000        # 200ms @ 50MHz (10M ciclos)
 
-# Direções da animação
-.equ ESQUERDA_DIREITA,      0               # SW0=0: LED 0->1->2...->17->0
-.equ DIREITA_ESQUERDA,      1               # SW0=1: LED 17->16->15...->0->17
+# Direções da animação (controladas por SW0)
+.equ ESQUERDA_DIREITA,      0               # SW0=0: LED 0→1→2→...→17→0
+.equ DIREITA_ESQUERDA,      1               # SW0=1: LED 17→16→15→...→0→17
 
-# Posições dos LEDs
-.equ LED_MIN,               0               # LED mínimo
-.equ LED_MAX,               17              # LED máximo
+# Limites dos LEDs
+.equ LED_MIN,               0               # LED mínimo (primeiro)
+.equ LED_MAX,               17              # LED máximo (último)
+
+# Máscaras de bit para LEDs extremos
+.equ LED_0_MASK,            0x00001         # 2^0 = LED 0
+.equ LED_17_MASK,           0x20000         # 2^17 = LED 17
+.equ LED_OVERFLOW_MASK,     0x40000         # 2^18 = overflow
 
 #========================================================================================================================================
 # FUNÇÃO PRINCIPAL DE ANIMAÇÃO - ABI COMPLIANT
@@ -165,22 +188,22 @@ _update_animation_step:
     beq         r17, r0, MOVER_ESQUERDA_DIREITA
     
 MOVER_DIREITA_ESQUERDA:
-    # Move da direita para esquerda (LED 17->16->...->0->17)
+    # Move da direita para esquerda (LED 17→16→...→0→17)
     srli        r16, r16, 1             # Desloca bit para direita
     bne         r16, r0, ATUALIZAR_LEDS_ANIM
     
     # Se chegou em 0, volta para LED 17
-    movia       r16, 0x20000            # 2^17 = LED 17
+    movia       r16, LED_17_MASK        # 2^17 = LED 17
     br          ATUALIZAR_LEDS_ANIM
     
 MOVER_ESQUERDA_DIREITA:
-    # Move da esquerda para direita (LED 0->1->...->17->0)
+    # Move da esquerda para direita (LED 0→1→...→17→0)
     slli        r16, r16, 1             # Desloca bit para esquerda
-    movia       r1, 0x40000             # 2^18 (overflow)
+    movia       r1, LED_OVERFLOW_MASK   # 2^18 (overflow)
     bne         r16, r1, ATUALIZAR_LEDS_ANIM
     
     # Se passou do LED 17, volta para LED 0
-    movi        r16, 1                  # 2^0 = LED 0
+    movia       r16, LED_0_MASK         # 2^0 = LED 0
     
 ATUALIZAR_LEDS_ANIM:
     # Salva novo estado
@@ -266,12 +289,12 @@ DETERMINAR_POSICAO_INICIAL:
     
 INIT_DIREITA_ESQUERDA:
     # SW0=1: Inicia da direita (LED 17)
-    movia       r1, 0x20000             # 2^17 = LED 17
+    movia       r1, LED_17_MASK         # 2^17 = LED 17
     br          SALVAR_POSICAO_INICIAL
     
 INIT_ESQUERDA_DIREITA:
     # SW0=0: Inicia da esquerda (LED 0)
-    movi        r1, 1                   # 2^0 = LED 0
+    movia       r1, LED_0_MASK          # 2^0 = LED 0
     
 SALVAR_POSICAO_INICIAL:
     # Salva posição inicial
@@ -290,7 +313,7 @@ SALVAR_POSICAO_INICIAL:
 
 #------------------------------------------------------------------------
 # Lê direção do switch SW0
-# Saída: r2 = direção (0 = esq->dir, 1 = dir->esq)
+# Saída: r2 = direção (0 = esq→dir, 1 = dir→esq)
 #------------------------------------------------------------------------
 LER_DIRECAO_SW0:
     # --- Stack Frame Prologue ---

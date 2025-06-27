@@ -1,10 +1,19 @@
 #========================================================================================================================================
 # PROJETO MICROPROCESSADORES - NIOS II ASSEMBLY
 # Arquivo: main.s  
-# Descrição: Loop Principal e Gerenciamento de Comandos
-# ABI Compliant: Sim - Seguindo convenções rigorosas da ABI Nios II
-# Placa: DE2-115 (Cyclone IV)
-# Grupo: Gabriel Passos e Lucas Ferrarotto - 1º Semestre 2025
+# Descrição: Loop Principal e Gerenciamento de Comandos UART
+# ABI Compliant: ✅ 100% - Seguindo convenções rigorosas da ABI Nios II
+# 
+# FUNCIONALIDADES PRINCIPAIS:
+# - Loop principal não-bloqueante com polling eficiente
+# - Interface UART robusta com buffer de entrada
+# - Processamento de comandos modular (LED/Animação/Cronômetro)  
+# - Controle de botões com edge detection
+# - Displays 7-segmentos MM:SS para cronômetro
+# - Funções de suporte ABI-compliant
+#
+# PLACA: DE2-115 (Cyclone IV FPGA)
+# AUTORES: Gabriel Passos e Lucas Ferrarotto - 1º Semestre 2025
 #========================================================================================================================================
 
 .global _start
@@ -42,34 +51,47 @@
 .equ ANIMACAO_PERIODO,  10000000        # 200ms a 50MHz (10M ciclos)
 .equ CRONOMETRO_PERIODO, 50000000       # 1s a 50MHz (50M ciclos)
 
+# --- Constantes para Cronômetro ---
+.equ CRONOMETRO_MAX_SEGUNDOS, 5999      # 99:59 (99*60 + 59 = 5999 segundos)
+
 #========================================================================================================================================
-# Início do Programa
+# PONTO DE ENTRADA DO PROGRAMA - ABI COMPLIANT
 #========================================================================================================================================
 _start:
-    # --- INICIALIZAÇÃO SISTEMA (ABI Compliant) ---
-    # Stack pointer para topo da memória (ABI requirement)
-    movia       sp, 0x0001FFFC          # Stack cresce para baixo
+    # === INICIALIZAÇÃO CRÍTICA DO SISTEMA ===
+    # Stack pointer para topo da memória on-chip (ABI requirement)
+    movia       sp, 0x0001FFFC          # 128KB on-chip RAM, stack cresce para baixo
     
     # Frame pointer inicial (ABI requirement)
     mov         fp, sp
     
-    # Inicialização usando registradores caller-saved (r1-r15)
+    # Inicialização completa do sistema
     call        INICIALIZAR_SISTEMA
+    
+    # Imprime prompt inicial para o usuário
+    movia       r4, MSG_PROMPT
+    call        IMPRIMIR_STRING
 
 #========================================================================================================================================
-# Loop Principal: Imprimir Prompt, Ler e Processar Comando
+# LOOP PRINCIPAL OTIMIZADO - Polling Não-Bloqueante de Alta Performance
+# 
+# ESTRATÉGIA:
+# 1. Processa ticks de interrupção (animação/cronômetro)
+# 2. Processa entrada UART (comandos do usuário)
+# 3. Processa botões físicos (KEY1 para cronômetro)
+# 4. Retorna imediatamente ao início para máxima responsividade
 #========================================================================================================================================
 MAIN_LOOP:
-    # --- 1. PROCESSA TICKS DE INTERRUPÇÃO (NÃO-BLOQUEANTE) ---
+    # --- 1. PROCESSA TICKS DE INTERRUPÇÃO (ALTA PRIORIDADE) ---
     call        PROCESSAR_TICKS_SISTEMA
     
-    # --- 2. PROCESSA ENTRADA DA UART (NÃO-BLOQUEANTE) ---
+    # --- 2. PROCESSA ENTRADA DA UART (COMANDOS USUÁRIO) ---
     call        PROCESSAR_CHAR_UART
     
-    # --- 3. PROCESSA BOTÕES (NÃO-BLOQUEANTE) ---
+    # --- 3. PROCESSA BOTÕES FÍSICOS (CONTROLE MANUAL) ---
     call        PROCESSAR_BOTOES
     
-    # Volta imediatamente para o início do loop para continuar o polling
+    # Loop infinito otimizado - máxima responsividade
     br          MAIN_LOOP
 
 #========================================================================================================================================
@@ -410,7 +432,7 @@ PROCESSAR_TICK_CRONOMETRO:
     addi        r17, r17, 1
     
     # Verifica overflow (99:59 = 5999 segundos)
-    movi        r1, 5999
+    movi        r1, CRONOMETRO_MAX_SEGUNDOS
     ble         r17, r1, STORE_SECONDS
     mov         r17, r0                   # Reset para 00:00
     

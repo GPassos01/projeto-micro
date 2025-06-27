@@ -1,9 +1,29 @@
 #========================================================================================================================================
 # PROJETO MICROPROCESSADORES - NIOS II ASSEMBLY
 # Arquivo: cronometro.s
-# Descrição: Sistema de Cronômetro com Displays 7-Segmentos
-# ABI Compliant: Sim - Seguindo convenções rigorosas da ABI Nios II
-# Funcionalidades: Iniciar (20), Cancelar (21), Pausar/Retomar (KEY1)
+# Descrição: Sistema de Cronômetro Digital MM:SS com Displays 7-Segmentos
+# ABI Compliant: ✅ 100% - Seguindo convenções rigorosas da ABI Nios II
+#
+# FUNCIONALIDADES PRINCIPAIS:
+# - Cronômetro digital formato MM:SS (00:00 até 99:59)
+# - Displays 7-segmentos dedicados (HEX3-HEX0)
+# - Controle via comandos UART e botão físico KEY1
+# - Função pause/resume em tempo real
+# - Timer compartilhado inteligente com animação
+# - Overflow automático em 99:59 → 00:00
+#
+# COMANDOS SUPORTADOS:
+# - "20" → Inicia cronômetro (00:00)
+# - "21" → Cancela cronômetro e zera displays
+# - KEY1 → Pausa/Resume cronômetro (quando ativo)
+#
+# FORMATO DE DISPLAY:
+# - HEX3: Dezenas de minutos (0-9)
+# - HEX2: Unidades de minutos (0-9)  
+# - HEX1: Dezenas de segundos (0-5)
+# - HEX0: Unidades de segundos (0-9)
+#
+# AUTORES: Gabriel Passos e Lucas Ferrarotto - 1º Semestre 2025
 #========================================================================================================================================
 
 .global _cronometro
@@ -18,31 +38,33 @@
 .extern FLAG_INTERRUPCAO
 
 #========================================================================================================================================
-# Definições e Constantes
+# Definições e Constantes - Hardware DE2-115
 #========================================================================================================================================
 .equ HEX_BASE,              0x10000020      # Displays 7-segmentos (HEX3-0)
 .equ KEY_BASE,              0x10000050      # Botões (KEY3-0)
 .equ TIMER_BASE,            0x10002000      # Timer do sistema
 
-# Configurações de timing
-.equ CRONOMETRO_PERIODO,    50000000        # 1s a 50MHz (50M ciclos)
-.equ ANIMACAO_PERIODO,       10000000        # 200ms a 50MHz (10M ciclos)
+# Configurações de timing do sistema
+.equ CRONOMETRO_PERIODO,    50000000        # 1s @ 50MHz (50M ciclos)
+.equ ANIMACAO_PERIODO,       10000000       # 200ms @ 50MHz (10M ciclos)
 
-# Limites do cronômetro
+# Limites e constantes do cronômetro
 .equ CRONOMETRO_MAX,        5999            # 99:59 (99*60 + 59 = 5999 segundos)
+.equ MINUTOS_POR_HORA,      60              # Divisor para cálculo de minutos
+.equ DEZENAS,               10              # Divisor para separar dezenas/unidades
 
 # Operações do cronômetro
 .equ OP_INICIAR,            0               # Comando 20
 .equ OP_CANCELAR,           1               # Comando 21
 
-# Códigos ASCII
+# Códigos ASCII para parsing
 .equ ASCII_ZERO,            0x30            # '0'
 
-# Offsets dos displays
-.equ HEX0_OFFSET,           0               # Unidades de segundos
-.equ HEX1_OFFSET,           4               # Dezenas de segundos  
-.equ HEX2_OFFSET,           8               # Unidades de minutos
-.equ HEX3_OFFSET,           12              # Dezenas de minutos
+# Máscaras para displays 7-segmentos (32 bits)
+.equ HEX3_SHIFT,            24              # Bits 31-24: HEX3 (dezenas minutos)
+.equ HEX2_SHIFT,            16              # Bits 23-16: HEX2 (unidades minutos)
+.equ HEX1_SHIFT,            8               # Bits 15-8:  HEX1 (dezenas segundos)
+.equ HEX0_SHIFT,            0               # Bits 7-0:   HEX0 (unidades segundos)
 
 #========================================================================================================================================
 # FUNÇÃO PRINCIPAL DO CRONÔMETRO - ABI COMPLIANT
