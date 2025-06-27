@@ -24,11 +24,7 @@
 
 # --- Endereços de Periféricos (Memory-Mapped I/O) ---
 .equ LED_BASE,          0x10000000      # LEDs vermelhos (18 LEDs: 0-17)
-.equ HEX_BASE,          0x10000020      # Displays 7-segmentos (HEX3-0)
-.equ HEX0_BASE,         0x10000020      # Display HEX0 (unidades segundos)
-.equ HEX1_BASE,         0x10000024      # Display HEX1 (dezenas segundos)  
-.equ HEX2_BASE,         0x10000028      # Display HEX2 (unidades minutos)
-.equ HEX3_BASE,         0x1000002C      # Display HEX3 (dezenas minutos)
+.equ HEX_BASE,          0x10000020      # Displays 7-segmentos (HEX3-0) em 32 bits
 .equ SW_BASE,           0x10000040      # Switches (SW17-0)
 .equ KEY_BASE,          0x10000050      # Botões (KEY3-0)
 .equ JTAG_UART_BASE,    0x10001000      # JTAG UART
@@ -87,14 +83,8 @@ INICIALIZAR_SISTEMA:
     stwio       r0, (r16)
     
     # Inicializa displays 7-segmentos (todos apagados)
-    movia       r16, HEX0_BASE
-    stwio       r0, (r16)                # HEX0
-    movia       r16, HEX1_BASE
-    stwio       r0, (r16)                # HEX1  
-    movia       r16, HEX2_BASE
-    stwio       r0, (r16)                # HEX2
-    movia       r16, HEX3_BASE
-    stwio       r0, (r16)                # HEX3
+    movia       r16, HEX_BASE
+    stwio       r0, (r16)                # Limpa todos os 4 displays (0x00000000)
     
     # Inicializa estado dos LEDs
     movia       r16, LED_STATE
@@ -357,42 +347,51 @@ TICK_CRONO_EXIT:
 #========================================================================================================================================
 TESTE_DISPLAY_CRONOMETRO:
     # --- Stack Frame Prologue ---
-    subi        sp, sp, 12
-    stw         ra, 8(sp)
-    stw         r16, 4(sp)
-    stw         r17, 0(sp)
+    subi        sp, sp, 16
+    stw         ra, 12(sp)
+    stw         r16, 8(sp)
+    stw         r17, 4(sp)
+    stw         r18, 0(sp)
     
-    # === TESTE COM ENDEREÇOS INDIVIDUAIS ===
+    # === MAPEAMENTO CORRETO: UM REGISTRADOR COM 4 CAMPOS ===
+    # HEX_BASE = 0x10000020 (32 bits)
+    # Bits 31-24: HEX3, Bits 23-16: HEX2, Bits 15-8: HEX1, Bits 7-0: HEX0
     
-    # HEX3 = 0 (dezenas de minutos)
+    movia       r16, HEX_BASE
+    mov         r17, r0                  # Valor final dos displays
+    
+    # === CODIFICA DÍGITO 0 PARA HEX3 (bits 31-24) ===
     mov         r4, r0                   # Dígito 0
     call        CODIFICAR_7SEG
-    movia       r16, HEX3_BASE
-    stwio       r2, (r16)
+    slli        r18, r2, 24             # Shift para bits 31-24
+    or          r17, r17, r18           # Adiciona ao valor final
     
-    # HEX2 = 1 (unidades de minutos)
-    movi        r4, 1                    # Dígito 1
+    # === CODIFICA DÍGITO 1 PARA HEX2 (bits 23-16) ===
+    movi        r4, 1                   # Dígito 1
     call        CODIFICAR_7SEG
-    movia       r16, HEX2_BASE
-    stwio       r2, (r16)
+    slli        r18, r2, 16             # Shift para bits 23-16
+    or          r17, r17, r18           # Adiciona ao valor final
     
-    # HEX1 = 2 (dezenas de segundos)
-    movi        r4, 2                    # Dígito 2
+    # === CODIFICA DÍGITO 2 PARA HEX1 (bits 15-8) ===
+    movi        r4, 2                   # Dígito 2
     call        CODIFICAR_7SEG
-    movia       r16, HEX1_BASE
-    stwio       r2, (r16)
+    slli        r18, r2, 8              # Shift para bits 15-8
+    or          r17, r17, r18           # Adiciona ao valor final
     
-    # HEX0 = 3 (unidades de segundos)
-    movi        r4, 3                    # Dígito 3
+    # === CODIFICA DÍGITO 3 PARA HEX0 (bits 7-0) ===
+    movi        r4, 3                   # Dígito 3
     call        CODIFICAR_7SEG
-    movia       r16, HEX0_BASE
-    stwio       r2, (r16)
+    or          r17, r17, r2            # Adiciona aos bits 7-0 (sem shift)
+    
+    # === ESCREVE VALOR FINAL NO REGISTRADOR ===
+    stwio       r17, (r16)              # Escreve todos os 4 displays de uma vez
     
     # --- Stack Frame Epilogue ---
-    ldw         r17, 0(sp)
-    ldw         r16, 4(sp)
-    ldw         ra, 8(sp)
-    addi        sp, sp, 12
+    ldw         r18, 0(sp)
+    ldw         r17, 4(sp)
+    ldw         r16, 8(sp)
+    ldw         ra, 12(sp)
+    addi        sp, sp, 16
     ret
 
 #========================================================================================================================================
@@ -400,68 +399,76 @@ TESTE_DISPLAY_CRONOMETRO:
 #========================================================================================================================================
 ATUALIZAR_DISPLAY_CRONOMETRO:
     # --- Stack Frame Prologue ---
-    subi        sp, sp, 24
-    stw         ra, 20(sp)
-    stw         r16, 16(sp)              # Segundos totais
-    stw         r17, 12(sp)              # Minutos calculados
-    stw         r18, 8(sp)               # Segundos restantes
-    stw         r19, 4(sp)               # Registrador temp para cálculos
-    stw         r20, 0(sp)               # Base dos displays
+    subi        sp, sp, 32
+    stw         ra, 28(sp)
+    stw         r16, 24(sp)              # Segundos totais
+    stw         r17, 20(sp)              # Minutos calculados
+    stw         r18, 16(sp)              # Segundos restantes
+    stw         r19, 12(sp)              # Valor final dos displays
+    stw         r20, 8(sp)               # Temp para cálculos
+    stw         r21, 4(sp)               # Temp para dígitos
+    stw         r22, 0(sp)               # Temp para shifts
     
     # Carrega segundos totais do cronômetro
     movia       r1, CRONOMETRO_SEGUNDOS
     ldw         r16, (r1)
-    
-    # Base dos displays
-    movia       r20, HEX_BASE
     
     # === CÁLCULO CORRETO: MINUTOS E SEGUNDOS ===
     # Minutos = segundos_totais / 60
     movi        r1, 60
     div         r17, r16, r1             # r17 = minutos
     
-    # Segundos restantes = segundos_totais % 60  
-    mul         r1, r17, r1              # r1 = minutos * 60
-    sub         r18, r16, r1             # r18 = segundos restantes
+    # Segundos restantes = segundos_totais % 60
+    mul         r2, r17, r1              # r2 = minutos * 60
+    sub         r18, r16, r2             # r18 = segundos restantes
     
-    # === HEX3: DEZENAS DE MINUTOS ===
-    movi        r1, 10
-    div         r19, r17, r1             # r19 = dezenas_minutos
-    mov         r4, r19                  # Argumento para CODIFICAR_7SEG
-    call        CODIFICAR_7SEG
-    stwio       r2, 12(r20)              # Escreve em HEX3
+    # === MONTAGEM DO VALOR DOS DISPLAYS ===
+    mov         r19, r0                  # Valor final = 0
     
-    # === HEX2: UNIDADES DE MINUTOS ===
+    # === HEX3: DEZENAS DE MINUTOS (bits 31-24) ===
     movi        r1, 10
-    mul         r19, r19, r1             # r19 = dezenas_minutos * 10
-    sub         r19, r17, r19            # r19 = unidades_minutos
-    mov         r4, r19
+    div         r21, r17, r1             # Dezenas de minutos
+    mov         r4, r21
     call        CODIFICAR_7SEG
-    stwio       r2, 8(r20)               # Escreve em HEX2
+    slli        r22, r2, 24             # Shift para bits 31-24
+    or          r19, r19, r22
     
-    # === HEX1: DEZENAS DE SEGUNDOS ===
-    movi        r1, 10
-    div         r19, r18, r1             # r19 = dezenas_segundos
-    mov         r4, r19
+    # === HEX2: UNIDADES DE MINUTOS (bits 23-16) ===
+    mul         r20, r21, r1             # dezenas * 10
+    sub         r21, r17, r20            # Unidades de minutos
+    mov         r4, r21
     call        CODIFICAR_7SEG
-    stwio       r2, 4(r20)               # Escreve em HEX1
+    slli        r22, r2, 16             # Shift para bits 23-16
+    or          r19, r19, r22
     
-    # === HEX0: UNIDADES DE SEGUNDOS ===
-    movi        r1, 10
-    mul         r19, r19, r1             # r19 = dezenas_segundos * 10
-    sub         r19, r18, r19            # r19 = unidades_segundos
-    mov         r4, r19
+    # === HEX1: DEZENAS DE SEGUNDOS (bits 15-8) ===
+    div         r21, r18, r1             # Dezenas de segundos
+    mov         r4, r21
     call        CODIFICAR_7SEG
-    stwio       r2, 0(r20)               # Escreve em HEX0
+    slli        r22, r2, 8              # Shift para bits 15-8
+    or          r19, r19, r22
+    
+    # === HEX0: UNIDADES DE SEGUNDOS (bits 7-0) ===
+    mul         r20, r21, r1             # dezenas * 10
+    sub         r21, r18, r20            # Unidades de segundos
+    mov         r4, r21
+    call        CODIFICAR_7SEG
+    or          r19, r19, r2             # Adiciona aos bits 7-0 (sem shift)
+    
+    # === ESCREVE NO HARDWARE ===
+    movia       r1, HEX_BASE
+    stwio       r19, (r1)               # Escreve todos os displays
     
     # --- Stack Frame Epilogue ---
-    ldw         r20, 0(sp)
-    ldw         r19, 4(sp)
-    ldw         r18, 8(sp)
-    ldw         r17, 12(sp)
-    ldw         r16, 16(sp)
-    ldw         ra, 20(sp)
-    addi        sp, sp, 24
+    ldw         r22, 0(sp)
+    ldw         r21, 4(sp)
+    ldw         r20, 8(sp)
+    ldw         r19, 12(sp)
+    ldw         r18, 16(sp)
+    ldw         r17, 20(sp)
+    ldw         r16, 24(sp)
+    ldw         ra, 28(sp)
+    addi        sp, sp, 32
     ret
 
 #========================================================================================================================================
