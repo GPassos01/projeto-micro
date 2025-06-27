@@ -13,6 +13,8 @@
 .extern CRONOMETRO_PAUSADO
 .extern CRONOMETRO_ATIVO
 .extern CRONOMETRO_TICK_FLAG
+.extern CONFIGURAR_TIMER
+.extern PARAR_TIMER
 
 #========================================================================================================================================
 # Definições e Constantes
@@ -69,47 +71,28 @@ _cronometro:
 #========================================================================================================================================
 
 INICIAR_CRONOMETRO:
-    # Verifica se cronômetro já está ativo
-    movia       r1, CRONOMETRO_ATIVO
-    ldw         r2, (r1)
-    bne         r2, r0, CRONOMETRO_JA_ATIVO
-    
-    # Inicializa estado do cronômetro
+    movia       r8, CRONOMETRO_ATIVO
+    ldw         r9, (r8)
+    bne         r9, r0, CRONOMETRO_JA_ATIVO
     call        INICIALIZAR_ESTADO_CRONOMETRO
-    
     # Configura e inicia timer do cronômetro
-    call        CONFIGURAR_TIMER_CRONOMETRO
-    
-    # Configura interrupção do KEY1 para pause/resume
+    movia       r4, CRONOMETRO_PERIODO
+    call        CONFIGURAR_TIMER
     call        CONFIGURAR_KEY1_INTERRUPCAO
-    
-    # Ativa cronômetro
-    movia       r1, CRONOMETRO_ATIVO
-    movi        r2, 1
-    stw         r2, (r1)
-    
-    # Atualiza display inicial
+    movia       r8, CRONOMETRO_ATIVO
+    movi        r9, 1
+    stw         r9, (r8)
     call        ATUALIZAR_DISPLAY_CRONOMETRO
-    
     br          FIM_CRONOMETRO
 
 CANCELAR_CRONOMETRO:
-    # Para timer do cronômetro
-    call        PARAR_TIMER_CRONOMETRO
-    
-    # Desativa cronômetro
-    movia       r1, CRONOMETRO_ATIVO
-    stw         r0, (r1)
-    
-    # Zera contador
-    movia       r1, CRONOMETRO_SEGUNDOS
-    stw         r0, (r1)
-    
-    # Limpa pausado
-    movia       r1, CRONOMETRO_PAUSADO
-    stw         r0, (r1)
-    
-    # Limpa displays
+    call        PARAR_TIMER
+    movia       r8, CRONOMETRO_ATIVO
+    stw         r0, (r8)
+    movia       r8, CRONOMETRO_SEGUNDOS
+    stw         r0, (r8)
+    movia       r8, CRONOMETRO_PAUSADO
+    stw         r0, (r8)
     call        LIMPAR_DISPLAYS
 
 CRONOMETRO_JA_ATIVO:
@@ -155,84 +138,6 @@ INICIALIZAR_ESTADO_CRONOMETRO:
     ret
 
 #========================================================================================================================================
-# FUNÇÕES DE TIMER - ABI COMPLIANT
-#========================================================================================================================================
-
-#------------------------------------------------------------------------
-# Configura e inicia timer para cronômetro
-#------------------------------------------------------------------------
-CONFIGURAR_TIMER_CRONOMETRO:
-    # --- Stack Frame Prologue ---
-    subi        sp, sp, 12
-    stw         ra, 8(sp)
-    stw         r16, 4(sp)
-    stw         r17, 0(sp)
-    
-    movia       r16, TIMER_BASE
-    
-    # Para timer primeiro (segurança)
-    stwio       r0, 4(r16)              # Control = 0
-    
-    # Configura período (1s = 50M ciclos a 50MHz)
-    movia       r17, CRONOMETRO_PERIODO
-    
-    # Bits baixos do período
-    andi        r1, r17, 0xFFFF
-    stwio       r1, 8(r16)              # periodl
-    
-    # Bits altos do período  
-    srli        r17, r17, 16
-    stwio       r17, 12(r16)            # periodh
-    
-    # Limpa flag de timeout pendente
-    movi        r1, 1
-    stwio       r1, 0(r16)              # status = 1 (limpa TO)
-    
-    # Habilita interrupções do timer
-    movi        r1, 1                   # IRQ0 para timer
-    wrctl       ienable, r1
-    wrctl       status, r1              # Habilita PIE
-    
-    # Inicia timer: START=1, CONT=1, ITO=1
-    movi        r1, 7                   # 0b111
-    stwio       r1, 4(r16)              # control
-    
-    # --- Stack Frame Epilogue ---
-    ldw         r17, 0(sp)
-    ldw         r16, 4(sp)
-    ldw         ra, 8(sp)
-    addi        sp, sp, 12
-    ret
-
-#------------------------------------------------------------------------
-# Para timer do cronômetro de forma robusta
-#------------------------------------------------------------------------
-PARAR_TIMER_CRONOMETRO:
-    # --- Stack Frame Prologue ---
-    subi        sp, sp, 8
-    stw         ra, 4(sp)
-    stw         r16, 0(sp)
-    
-    movia       r16, TIMER_BASE
-    
-    # Para timer primeiro
-    stwio       r0, 4(r16)              # control = 0
-    
-    # Limpa flag de timeout
-    movi        r1, 1
-    stwio       r1, 0(r16)              # status = 1
-    
-    # Desabilita interrupções do timer
-    wrctl       ienable, r0             # Desabilita todas IRQs
-    wrctl       status, r0              # Desabilita PIE
-    
-    # --- Stack Frame Epilogue ---
-    ldw         r16, 0(sp)
-    ldw         ra, 4(sp)
-    addi        sp, sp, 8
-    ret
-
-#========================================================================================================================================
 # FUNÇÕES DE DISPLAY - ABI COMPLIANT
 #========================================================================================================================================
 
@@ -241,60 +146,44 @@ PARAR_TIMER_CRONOMETRO:
 # Formato: MM:SS (HEX3 HEX2 : HEX1 HEX0)
 #------------------------------------------------------------------------
 ATUALIZAR_DISPLAY_CRONOMETRO:
-    # --- Stack Frame Prologue ---
     subi        sp, sp, 24
     stw         ra, 20(sp)
-    stw         r16, 16(sp)             # Segundos totais
-    stw         r17, 12(sp)             # Minutos
-    stw         r18, 8(sp)              # Segundos restantes
-    stw         r19, 4(sp)              # HEX base
-    stw         r20, 0(sp)              # Dígito temporário
-    
-    # Carrega segundos totais
-    movia       r1, CRONOMETRO_SEGUNDOS
-    ldw         r16, (r1)
-    
+    stw         r16, 16(sp)
+    stw         r17, 12(sp)
+    stw         r18, 8(sp)
+    stw         r19, 4(sp)
+    stw         r20, 0(sp)
+    movia       r8, CRONOMETRO_SEGUNDOS
+    ldw         r16, (r8)
     movia       r19, HEX_BASE
-    
-    # Calcula minutos e segundos
-    movi        r1, 60
-    div         r17, r16, r1             # r17 = minutos
-    mul         r2, r17, r1              # r2 = minutos * 60
-    sub         r18, r16, r2             # r18 = segundos restantes
-    
-    # HEX3 (dezenas de minutos)
-    movi        r1, 10
-    div         r20, r17, r1             # r20 = dezenas de minutos
+    movi        r8, 60
+    div         r17, r16, r8
+    mul         r9, r17, r8
+    sub         r18, r16, r9
+    movi        r8, 10
+    div         r20, r17, r8
     mov         r4, r20
     call        CODIFICAR_7SEG
-    stwio       r2, HEX3_OFFSET(r19)     # HEX3
-    
-    # HEX2 (unidades de minutos)
-    movi        r1, 10
-    div         r2, r17, r1              # r2 = dezenas
-    mul         r2, r2, r1               # r2 = dezenas * 10
-    sub         r20, r17, r2             # r20 = unidades de minutos
+    stwio       r2, HEX3_OFFSET(r19)
+    movi        r8, 10
+    div         r9, r17, r8
+    mul         r9, r9, r8
+    sub         r20, r17, r9
     mov         r4, r20
     call        CODIFICAR_7SEG
-    stwio       r2, HEX2_OFFSET(r19)     # HEX2
-    
-    # HEX1 (dezenas de segundos)
-    movi        r1, 10
-    div         r20, r18, r1             # r20 = dezenas de segundos
+    stwio       r2, HEX2_OFFSET(r19)
+    movi        r8, 10
+    div         r20, r18, r8
     mov         r4, r20
     call        CODIFICAR_7SEG
-    stwio       r2, HEX1_OFFSET(r19)     # HEX1
-    
-    # HEX0 (unidades de segundos)
-    movi        r1, 10
-    div         r2, r18, r1              # r2 = dezenas
-    mul         r2, r2, r1               # r2 = dezenas * 10  
-    sub         r20, r18, r2             # r20 = unidades de segundos
+    stwio       r2, HEX1_OFFSET(r19)
+    movi        r8, 10
+    div         r9, r18, r8
+    mul         r9, r9, r8
+    sub         r20, r18, r9
     mov         r4, r20
     call        CODIFICAR_7SEG
-    stwio       r2, HEX0_OFFSET(r19)     # HEX0
-    
-    # --- Stack Frame Epilogue ---
+    stwio       r2, HEX0_OFFSET(r19)
     ldw         r20, 0(sp)
     ldw         r19, 4(sp)
     ldw         r18, 8(sp)
@@ -333,28 +222,20 @@ LIMPAR_DISPLAYS:
 # Saída: r2 = código 7-segmentos
 #------------------------------------------------------------------------
 CODIFICAR_7SEG:
-    # --- Stack Frame Prologue ---
     subi        sp, sp, 8
     stw         ra, 4(sp)
     stw         r16, 0(sp)
-    
-    # Validação de entrada
-    movi        r1, 9
-    bgt         r4, r1, DIGITO_INVALIDO_7SEG
+    movi        r8, 9
+    bgt         r4, r8, DIGITO_INVALIDO_7SEG
     blt         r4, r0, DIGITO_INVALIDO_7SEG
-    
-    # Carrega código da tabela (usa a tabela global do main.s)
     movia       r16, TABELA_7SEG
-    slli        r1, r4, 2                # Multiplica por 4 (word)
-    add         r16, r16, r1
-    ldw         r2, (r16)                # Carrega código
+    slli        r8, r4, 2
+    add         r16, r16, r8
+    ldw         r2, (r16)
     br          CODIF_7SEG_EXIT
-    
 DIGITO_INVALIDO_7SEG:
-    movi        r2, 0x00                 # Display apagado
-    
+    movi        r2, 0x00
 CODIF_7SEG_EXIT:
-    # --- Stack Frame Epilogue ---
     ldw         r16, 0(sp)
     ldw         ra, 4(sp)
     addi        sp, sp, 8

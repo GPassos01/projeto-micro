@@ -551,4 +551,64 @@ MSG_PROMPT:
 .extern _cronometro
 .extern _update_animation_step
 
+#========================================================================================================================================
+# FUNÇÕES DE TIMER UNIFICADAS
+#========================================================================================================================================
+# Configura e inicia o timer com um período específico
+# Entrada: r4 = período em ciclos
+CONFIGURAR_TIMER:
+    # --- Stack Frame ---
+    subi  sp, sp, 12
+    stw   ra, 8(sp)
+    stw   r8, 4(sp)
+    stw   r9, 0(sp)
+    
+    movia r8, TIMER_BASE
+    
+    # Para o timer antes de reconfigurar
+    stwio r0, 4(r8)
+    
+    # Configura o período
+    andi  r9, r4, 0xFFFF
+    stwio r9, 8(r8)             # periodl
+    srli  r4, r4, 16
+    stwio r4, 12(r8)            # periodh
+    
+    # Limpa flag de timeout e habilita interrupções
+    movi  r9, 1
+    stwio r9, 0(r8)
+    wrctl ienable, r9
+    wrctl status, r9
+
+    # Inicia o timer (START=1, CONT=1, ITO=1)
+    movi  r9, 7
+    stwio r9, 4(r8)
+    
+    # --- Epílogo ---
+    ldw   r9, 0(sp)
+    ldw   r8, 4(sp)
+    ldw   ra, 8(sp)
+    addi  sp, sp, 12
+    ret
+
+# Para o timer de forma segura
+PARAR_TIMER:
+    # --- Stack Frame ---
+    subi sp, sp, 4
+    stw  ra, 0(sp)
+    
+    movia r8, TIMER_BASE
+    # Para o timer
+    stwio r0, 4(r8)
+    # Limpa a flag de hardware
+    movi  r9, 1
+    stwio r9, 0(r8)
+    # Desabilita interrupções
+    wrctl ienable, r0
+    wrctl status, r0
+    
+    ldw  ra, 0(sp)
+    addi sp, sp, 4
+    ret
+
 .end

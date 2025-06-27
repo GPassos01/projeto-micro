@@ -7,11 +7,12 @@
 
 .global _animacao
 .global _update_animation_step
-
-# Referências para símbolos globais definidos em interrupcoes.s
 .extern FLAG_INTERRUPCAO
 .extern ANIMATION_STATE  
 .extern LED_STATE             # Definido em main.s
+.extern _update_animation_step
+.extern CONFIGURAR_TIMER
+.extern PARAR_TIMER
 
 #========================================================================================================================================
 # Definições e Constantes
@@ -79,12 +80,13 @@ INICIAR_ANIMACAO:
     call        DETERMINAR_POSICAO_INICIAL
     
     # Configura e inicia timer da animação
-    call        CONFIGURAR_TIMER_ANIMACAO
+    movia       r4, ANIMACAO_PERIODO  # Argumento para a função
+    call        CONFIGURAR_TIMER
     
     # Ativa flag de animação
-    movia       r1, FLAG_INTERRUPCAO
-    movi        r2, 1
-    stw         r2, (r1)
+    movia       r8, FLAG_INTERRUPCAO
+    movi        r9, 1
+    stw         r9, (r8)
     
     br          FIM_ANIMACAO
 
@@ -93,7 +95,7 @@ INICIAR_ANIMACAO:
 #========================================================================================================================================
 PARAR_ANIMACAO:
     # Para timer de forma robusta
-    call        PARAR_TIMER_ANIMACAO
+    call        PARAR_TIMER
     
     # Desativa flag de animação
     movia       r1, FLAG_INTERRUPCAO
@@ -183,92 +185,63 @@ ATUALIZAR_LEDS_ANIM:
     ret
 
 #========================================================================================================================================
-# FUNÇÕES DE SUPORTE - ABI COMPLIANT
+# FUNÇÕES DE SUPORTE - ABI COMPLIANT (E SEGURAS)
 #========================================================================================================================================
 
 #------------------------------------------------------------------------
 # Salva estado atual dos LEDs
 #------------------------------------------------------------------------
 SALVAR_ESTADO_LEDS:
-    # --- Stack Frame Prologue ---
-    subi        sp, sp, 8
-    stw         ra, 4(sp)
-    stw         r16, 0(sp)
-    
-    # Lê estado atual dos LEDs
-    movia       r16, LED_BASE
-    ldwio       r1, (r16)
-    
-    # Salva na variável LED_STATE
-    movia       r16, LED_STATE
-    stw         r1, (r16)
-    
-    # --- Stack Frame Epilogue ---
-    ldw         r16, 0(sp)
-    ldw         ra, 4(sp)
-    addi        sp, sp, 8
+    subi sp, sp, 8
+    stw  ra, 4(sp)
+    stw  r8, 0(sp)
+    movia r8, LED_BASE
+    ldwio r8, (r8)
+    movia r9, LED_STATE
+    stw   r8, (r9)
+    ldw   r8, 0(sp)
+    ldw   ra, 4(sp)
+    addi  sp, sp, 8
     ret
 
 #------------------------------------------------------------------------
 # Restaura estado anterior dos LEDs
 #------------------------------------------------------------------------
 RESTAURAR_ESTADO_LEDS:
-    # --- Stack Frame Prologue ---
-    subi        sp, sp, 8
-    stw         ra, 4(sp)
-    stw         r16, 0(sp)
-    
-    # Carrega estado salvo
-    movia       r16, LED_STATE
-    ldw         r1, (r16)
-    
-    # Restaura nos LEDs físicos
-    movia       r16, LED_BASE
-    stwio       r1, (r16)
-    
-    # --- Stack Frame Epilogue ---
-    ldw         r16, 0(sp)
-    ldw         ra, 4(sp)
-    addi        sp, sp, 8
+    subi sp, sp, 8
+    stw  ra, 4(sp)
+    stw  r8, 0(sp)
+    movia r8, LED_STATE
+    ldw   r8, (r8)
+    movia r9, LED_BASE
+    stwio r8, (r9)
+    ldw   r8, 0(sp)
+    ldw   ra, 4(sp)
+    addi  sp, sp, 8
     ret
 
 #------------------------------------------------------------------------
 # Determina posição inicial baseada no SW0
 #------------------------------------------------------------------------
 DETERMINAR_POSICAO_INICIAL:
-    # --- Stack Frame Prologue ---
-    subi        sp, sp, 8
-    stw         ra, 4(sp)
-    stw         r16, 0(sp)
-    
-    # Lê direção do SW0
-    call        LER_DIRECAO_SW0
-    mov         r16, r2                 # r16 = direção
-    
-    beq         r16, r0, INIT_ESQUERDA_DIREITA
-    
+    subi sp, sp, 8
+    stw  ra, 4(sp)
+    stw  r8, 0(sp)
+    call LER_DIRECAO_SW0
+    beq  r2, r0, INIT_ESQUERDA_DIREITA
 INIT_DIREITA_ESQUERDA:
-    # SW0=1: Inicia da direita (LED 17)
-    movia       r1, 0x20000             # 2^17 = LED 17
-    br          SALVAR_POSICAO_INICIAL
-    
+    movia r8, 0x20000
+    br    SALVAR_POSICAO_INICIAL
 INIT_ESQUERDA_DIREITA:
-    # SW0=0: Inicia da esquerda (LED 0)
-    movi        r1, 1                   # 2^0 = LED 0
-    
+    movi r8, 1
 SALVAR_POSICAO_INICIAL:
-    # Salva posição inicial
-    movia       r16, ANIMATION_STATE
-    stw         r1, (r16)
-    
-    # Acende LED inicial
-    movia       r16, LED_BASE
-    stwio       r1, (r16)
-    
-    # --- Stack Frame Epilogue ---
-    ldw         r16, 0(sp)
-    ldw         ra, 4(sp)
-    addi        sp, sp, 8
+    movia r9, ANIMATION_STATE
+    stw   r8, (r9)
+    movia r9, LED_BASE
+    stwio r8, (r9)
+    ldw   r8, 0(sp)
+    ldw   ra, 4(sp)
+    addi  sp, sp, 8
     ret
 
 #------------------------------------------------------------------------
@@ -276,98 +249,11 @@ SALVAR_POSICAO_INICIAL:
 # Saída: r2 = direção (0 = esq->dir, 1 = dir->esq)
 #------------------------------------------------------------------------
 LER_DIRECAO_SW0:
-    # --- Stack Frame Prologue ---
-    subi        sp, sp, 8
-    stw         ra, 4(sp)
-    stw         r16, 0(sp)
-    
-    # Lê estado dos switches
-    movia       r16, SW_BASE
-    ldwio       r1, (r16)
-    
-    # Isola SW0 (bit 0)
-    andi        r2, r1, 1
-    
-    # --- Stack Frame Epilogue ---
-    ldw         r16, 0(sp)
-    ldw         ra, 4(sp)
-    addi        sp, sp, 8
-    ret
-
-#========================================================================================================================================
-# FUNÇÕES DE TIMER - ABI COMPLIANT
-#========================================================================================================================================
-
-#------------------------------------------------------------------------
-# Configura e inicia timer para animação
-#------------------------------------------------------------------------
-CONFIGURAR_TIMER_ANIMACAO:
-    # --- Stack Frame Prologue ---
-    subi        sp, sp, 12
-    stw         ra, 8(sp)
-    stw         r16, 4(sp)
-    stw         r17, 0(sp)
-    
-    movia       r16, TIMER_BASE
-    
-    # Para timer primeiro (segurança)
-    stwio       r0, 4(r16)              # Control = 0
-    
-    # Configura período (200ms = 10M ciclos a 50MHz)
-    movia       r17, ANIMACAO_PERIODO
-    
-    # Bits baixos do período
-    andi        r1, r17, 0xFFFF
-    stwio       r1, 8(r16)              # periodl
-    
-    # Bits altos do período  
-    srli        r17, r17, 16
-    stwio       r17, 12(r16)            # periodh
-    
-    # Limpa flag de timeout pendente
-    movi        r1, 1
-    stwio       r1, 0(r16)              # status = 1 (limpa TO)
-    
-    # Habilita interrupções do timer
-    movi        r1, 1                   # IRQ0 para timer
-    wrctl       ienable, r1
-    wrctl       status, r1              # Habilita PIE
-    
-    # Inicia timer: START=1, CONT=1, ITO=1
-    movi        r1, 7                   # 0b111
-    stwio       r1, 4(r16)              # control
-    
-    # --- Stack Frame Epilogue ---
-    ldw         r17, 0(sp)
-    ldw         r16, 4(sp)
-    ldw         ra, 8(sp)
-    addi        sp, sp, 12
-    ret
-
-#------------------------------------------------------------------------
-# Para timer da animação de forma robusta
-#------------------------------------------------------------------------
-PARAR_TIMER_ANIMACAO:
-    # --- Stack Frame Prologue ---
-    subi        sp, sp, 8
-    stw         ra, 4(sp)
-    stw         r16, 0(sp)
-    
-    movia       r16, TIMER_BASE
-    
-    # Para timer primeiro
-    stwio       r0, 4(r16)              # control = 0
-    
-    # Limpa flag de timeout
-    movi        r1, 1
-    stwio       r1, 0(r16)              # status = 1
-    
-    # Desabilita interrupções do timer
-    wrctl       ienable, r0             # Desabilita todas IRQs
-    wrctl       status, r0              # Desabilita PIE
-    
-    # --- Stack Frame Epilogue ---
-    ldw         r16, 0(sp)
-    ldw         ra, 4(sp)
-    addi        sp, sp, 8
+    subi sp, sp, 4
+    stw  ra, 0(sp)
+    movia r8, SW_BASE
+    ldwio r2, (r8)
+    andi  r2, r2, 1
+    ldw   ra, 0(sp)
+    addi  sp, sp, 4
     ret
