@@ -41,14 +41,28 @@ INTERRUPCAO_HANDLER:
     ldw     r9, (r8)
     beq     r9, r0, REABILITAR_INTERRUPCOES  # Se não há animação, sai
     
-    # ANIMAÇÃO ULTRA-RÁPIDA - apenas r8 e r9
+    # ANIMAÇÃO COM DIREÇÃO SW0 - otimizada mas funcional
     movia   r8, ANIMATION_STATE
     ldw     r9, (r8)                 # Estado atual
     
-    # Movimento simples - sempre esquerda->direita por velocidade
-    slli    r9, r9, 1               # Move para próximo LED
+    # Lê direção do SW0 (rápido)
+    movia   r8, SW_BASE
+    ldwio   r8, (r8)
+    andi    r8, r8, 1               # Isola SW0
     
-    # Verifica overflow (passou do LED 17)
+    # Movimento baseado na direção
+    beq     r8, r0, MOVE_LEFT_RIGHT_FAST
+    
+MOVE_RIGHT_LEFT_FAST:
+    # SW0=1: Direita->Esquerda
+    srli    r9, r9, 1               
+    bne     r9, r0, UPDATE_LEDS_FAST
+    movia   r9, 0x20000             # Reset no LED 17 (bit 17)
+    br      UPDATE_LEDS_FAST
+    
+MOVE_LEFT_RIGHT_FAST:
+    # SW0=0: Esquerda->Direita
+    slli    r9, r9, 1               
     movia   r8, 0x40000             # 2^18 = limite
     blt     r9, r8, UPDATE_LEDS_FAST
     movi    r9, 1                   # Reset no LED 0

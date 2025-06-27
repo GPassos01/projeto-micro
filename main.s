@@ -78,8 +78,15 @@ PRINTF_LOOP:
     beq         r11, r0, POLLING_INPUT_LOOP
 
 POLLING_WRITE:
+    # ✅ ESCRITA ROBUSTA: Desabilita interrupções durante operação crítica
+    rdctl       r15, status          # Salva status atual
+    wrctl       status, r0           # Desabilita PIE temporariamente
+    
     # Lê o registrador de controle da UART para verificar o espaço disponível para escrita (WSPACE).
     ldwio       r12, UART_CONTROL(r8)
+    
+    # Re-habilita interrupções imediatamente após leitura
+    wrctl       status, r15          # Restaura status original
 
     # A informação de WSPACE está nos 16 bits superiores do registrador de controle.
     # A instrução 'andhi' realiza uma operação AND com uma máscara nos 16 bits superiores.
@@ -90,23 +97,36 @@ POLLING_WRITE:
     # Continua no loop de espera (polling) até que WSPACE seja diferente de zero.
     beq		    r12, r0, POLLING_WRITE
 
+    # ✅ ESCRITA ATÔMICA: Desabilita interrupções para escrita crítica
+    rdctl       r15, status          # Salva status atual
+    wrctl       status, r0           # Desabilita PIE temporariamente
+    
     # UART está pronta. Escreve o caractere (em r11) no registrador de dados da UART.
     stwio		r11, UART_DATA(r8)
+    
+    # Re-habilita interrupções imediatamente após escrita
+    wrctl       status, r15          # Restaura status original
 
     # Avança para o próximo caractere na string do prompt.
     addi        r9, r9, 1
     br          PRINTF_LOOP
 
-# --- 2. Aguarda e lê a entrada do usuário via UART (ROBUSTO COM INTERRUPÇÕES) ---
+# --- 2. Aguarda e lê a entrada do usuário via UART (ULTRA-ROBUSTO) ---
 POLLING_INPUT_LOOP:
-    # ✅ SOLUÇÃO: Polling resistente a interrupções
-    # Usa um contador para tentar múltiplas vezes mesmo com interrupções ativas
-    movi        r13, 1000           # Contador de tentativas para cada caractere
+    # ✅ SOLUÇÃO ULTRA-ROBUSTA: Desabilita interrupções temporariamente durante leitura crítica
+    movi        r13, 10000          # Contador muito maior de tentativas
     
 UART_RETRY_LOOP:
-    # Lê o registrador de dados da UART. Os 16 bits superiores contêm o status.
+    # Desabilita interrupções por brevíssimo período para leitura atômica
+    rdctl       r14, status          # Salva status atual
+    wrctl       status, r0           # Desabilita PIE temporariamente
+    
+    # Lê o registrador de dados da UART de forma atômica
     ldwio       r9, UART_DATA(r8)
-
+    
+    # Re-habilita interrupções imediatamente
+    wrctl       status, r14          # Restaura status original
+    
     # Isola o bit 15 (RVALID). Se for 1, há um dado válido para leitura.
     andi        r11, r9, 0x8000
 
