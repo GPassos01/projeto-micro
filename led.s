@@ -128,8 +128,9 @@ EXTRAIR_OPERACAO:
     stw         ra, 4(sp)
     stw         r16, 0(sp)
     
-    # Lê segundo caractere (posição 1)
-    addi        r16, r16, 1             # Aponta para posição 1
+    # CORRIGIDO: Resetar ponteiro e navegar para posição 1
+    mov         r16, r4                 # Reseta para início do comando
+    addi        r16, r16, 1             # Aponta para posição 1 (0X00)
     ldb         r1, (r16)               # Carrega caractere
     
     # Converte ASCII para número
@@ -153,8 +154,9 @@ EXTRAIR_NUMERO_LED:
     stw         r16, 4(sp)
     stw         r17, 0(sp)
     
-    # Extrai dezena (posição 2)
-    addi        r16, r16, 2             # Aponta para posição 2
+    # CORRIGIDO: Resetar ponteiro e navegar para posição 2
+    mov         r16, r4                 # Reseta para início do comando
+    addi        r16, r16, 2             # Aponta para posição 2 (00XX)
     ldb         r1, (r16)               # Carrega dígito dezena
     call        VALIDAR_DIGITO_ASCII
     beq         r2, r0, NUMERO_INVALIDO # Se não é dígito, erro
