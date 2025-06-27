@@ -88,9 +88,9 @@ INICIAR_TIMER_SIMPLES:
     # Para timer primeiro
     stwio       r0, 4(r8)
     
-    # Período mais longo e seguro: 500ms (25M ciclos)
+    # Período conforme PDF: 200ms (10M ciclos em 50MHz)
     # Bits baixos
-    movia       r9, 25000000
+    movia       r9, 10000000
     andi        r10, r9, 0xFFFF
     stwio       r10, 8(r8)
     

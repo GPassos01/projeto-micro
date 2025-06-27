@@ -49,8 +49,8 @@ _start:
     # Limpa as variáveis de estado
     movia       r8, LED_STATE
     stw         r0, (r8)
-    movia       r8, FLAG_INTERRUPCAO
-    stw         r0, (r8)
+    # FLAG_INTERRUPCAO já está inicializada em interrupcoes.s
+    # Não precisa zerar aqui pois já está em 0
 
     # O vetor de exceções está configurado no endereço 0x20.
     # A rotina INTERRUPCAO_HANDLER será chamada através do EXCEPTION_ENTRY.

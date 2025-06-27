@@ -7,16 +7,9 @@
 .equ SW_BASE,		0x10000040
 .equ LED_BASE,         0x10000000
 
-#========================================================================================================================================
-# Vetor de Exceções - CORRIGIDO: Agora no mesmo arquivo da ISR
-#========================================================================================================================================
-.section .exceptions.entry, "xa"
-.org 0x20
-EXCEPTION_ENTRY:
-    # Salto direto para o handler (sem br adicional)
-    br      INTERRUPCAO_HANDLER
+# O VETOR DE EXCEÇÕES FOI MOVIDO PARA O ARQUIVO 'vetores.s'
+# Este arquivo agora contém apenas a lógica da ISR e variáveis.
 
-# Retorna à seção de texto
 .section .text
 
 # Rotina de tratamento de exceções - VERSÃO MINIMALISTA E ROBUSTA
@@ -127,4 +120,4 @@ FLAG_INTERRUPCAO:
 # Estado da animação dos LEDs
 .global ANIMATION_STATE
 ANIMATION_STATE:
-    .word 0
+    .word 1  # ✅ CORREÇÃO: Inicia com LED 0 aceso
