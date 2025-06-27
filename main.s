@@ -88,8 +88,8 @@ MAIN_LOOP:
 INICIALIZAR_SISTEMA:
     # --- Stack Frame Prologue (ABI Standard) ---
     subi        sp, sp, 8
-    stw         ra, 4(sp)                # Salva return address (callee-saved)
-    stw         r16, 0(sp)               # Salva s0 (callee-saved)
+    stw         ra, 4(sp)                # Salva return address
+    stw         r16, 0(sp)               # Salva r16 (callee-saved)
     
     # Inicializa LEDs (todos apagados)
     movia       r16, LED_BASE
@@ -102,14 +102,14 @@ INICIALIZAR_SISTEMA:
     stwio       r0, 8(r16)               # HEX2
     stwio       r0, 12(r16)              # HEX3
     
-    # Inicializa variáveis de estado
+    # Inicializa estado dos LEDs
     movia       r16, LED_STATE
     stw         r0, (r16)
     
-    # --- Stack Frame Epilogue ---
-    ldw         r16, 0(sp)
-    ldw         ra, 4(sp)
-    addi        sp, sp, 8
+    # --- Stack Frame Epilogue (ABI Standard) ---
+    ldw         r16, 0(sp)               # Restaura r16
+    ldw         ra, 4(sp)                # Restaura return address
+    addi        sp, sp, 8                # Libera stack
     ret
 
 #========================================================================================================================================
@@ -453,10 +453,6 @@ CODIF_EXIT:
     addi        sp, sp, 8
     ret
 
-
-
-
-
 #========================================================================================================================================
 # Rotina para Limpar o Buffer
 #========================================================================================================================================
@@ -469,8 +465,6 @@ LIMPAR_LOOP:
     subi        r9, r9, 1           # Decrementa contador
     bne         r9, r0, LIMPAR_LOOP # Continua se não zerou
     ret
-
-
 
 #========================================================================================================================================
 # Seção de Dados - ABI ALIGNED
