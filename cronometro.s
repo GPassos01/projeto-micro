@@ -380,7 +380,7 @@ CODIFICAR_7SEG:
     blt         r4, r0, DIGITO_INVALIDO_7SEG
     
     # Carrega código da tabela
-    movia       r16, TABELA_7SEG
+    movia       r16, TABELA_7SEG_CRONO
     slli        r1, r4, 2                # Multiplica por 4 (word)
     add         r16, r16, r1
     ldw         r2, (r16)                # Carrega código
@@ -424,9 +424,8 @@ CONFIGURAR_KEY1_INTERRUPCAO:
 .section .data
 .align 4
 
-# Tabela de codificação para displays 7-segmentos
-.global TABELA_7SEG
-TABELA_7SEG:
+# Tabela de codificação para displays 7-segmentos (cronômetro)
+TABELA_7SEG_CRONO:
     .word 0x3F    # 0
     .word 0x06    # 1
     .word 0x5B    # 2

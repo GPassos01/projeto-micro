@@ -60,7 +60,6 @@ _start:
     
     # Configura vetor de exceções (endereço 0x20)
     movia       r1, INTERRUPCAO_HANDLER
-    wrctl       0x20, r1                 # (Conceitual - na prática o .org já faz isso)
 
 #========================================================================================================================================
 # Loop Principal: Imprimir Prompt, Ler e Processar Comando
