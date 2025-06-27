@@ -81,8 +81,8 @@ MOVE_LEFT_RIGHT:
     
 UPDATE_LEDS:
     stw     r9, (r8)                # Salva novo estado
-    movia   r8, LED_BASE
-    stwio   r9, (r8)                # Atualiza LEDs
+    movia   r12, LED_BASE           # ✅ USA r12, não sobrescreve r8!
+    stwio   r9, (r12)               # Atualiza LEDs
     br      END_HANDLER
 
 OTHER_INTERRUPTS:
