@@ -10,11 +10,16 @@
 .equ TIMER_BASE,       0x10002000
 
 _animacao:
-    # ✅ CORREÇÃO: Salva o endereço de retorno na pilha
-    # _animacao é uma função "não-folha" (chama outras funções),
-    # então precisa salvar 'ra' antes de fazer um 'call'.
-    subi        sp, sp, 4
-    stw         ra, 0(sp)
+    # --- Stack Frame Prologue (Padrão Nios II) ---
+    # Aloca 20 bytes na pilha para salvar 5 registradores (fp, ra, r10, r11, r12)
+    subi        sp, sp, 20
+    stw         fp, 16(sp)      # Salva o frame pointer antigo
+    stw         ra, 12(sp)      # Salva o endereço de retorno
+    stw         r12, 8(sp)      # Salva registradores que serão usados
+    stw         r11, 4(sp)
+    stw         r10, 0(sp)
+    # Configura o novo frame pointer
+    mov         fp, sp
 
     # O registrador r9 ainda aponta para a string de comando.
     # Avança para o segundo caractere (a sub-opção '0' ou '1').
@@ -83,10 +88,15 @@ SAVE_INITIAL:
     stw         r11, (r10)
 
 FIM_ANIMACAO:
-    # ✅ CORREÇÃO: Restaura o endereço de retorno da pilha
-    # Agora 'ret' vai pular de volta para o 'main.s' corretamente.
-    ldw         ra, 0(sp)
-    addi        sp, sp, 4
+    # --- Stack Frame Epilogue ---
+    # Restaura os registradores na ordem inversa
+    ldw         r10, 0(fp)
+    ldw         r11, 4(fp)
+    ldw         r12, 8(fp)
+    ldw         ra, 12(fp)      # Restaura o endereço de retorno
+    ldw         fp, 16(fp)      # Restaura o frame pointer antigo
+    # Desaloca o espaço da pilha
+    addi        sp, sp, 20
     ret
 
 #========================================================================================================================================
