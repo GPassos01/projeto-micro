@@ -26,7 +26,7 @@
 
 # Configurações de timing
 .equ CRONOMETRO_PERIODO,    50000000        # 1s a 50MHz (50M ciclos)
-.equ ANIMACAO_PERIODO,       20000000        # 200ms a 50MHz (20M ciclos)
+.equ ANIMACAO_PERIODO,       10000000        # 200ms a 50MHz (10M ciclos)
 
 # Limites do cronômetro
 .equ CRONOMETRO_MAX,        5999            # 99:59 (99*60 + 59 = 5999 segundos)
@@ -141,8 +141,8 @@ FINALIZAR_CANCELAMENTO_CRONOMETRO:
     stw         r0, (r1)
     
     # Limpa displays
-    movia       r1, HEX3_HEX0_BASE
-    stw         r0, (r1)
+    movia       r1, HEX_BASE
+    stwio       r0, (r1)
     
     # Mensagem de confirmação
     movia       r4, MSG_CRONOMETRO_CANCELADO
