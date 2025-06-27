@@ -10,153 +10,87 @@
 .equ SW_BASE,		0x10000040
 .equ LED_BASE,         0x10000000
 
-# Rotina de tratamento de exceções
+# Rotina de tratamento de exceções - VERSÃO MINIMALISTA E ROBUSTA
 INTERRUPCAO_HANDLER:
-    # Salva o contexto mínimo necessário para ISR - Conforme Intel Documentation
-    subi    sp, sp, 76
+    # Salva APENAS registradores essenciais - Intel Best Practice
+    subi    sp, sp, 32
     stw     ra, 0(sp)
-    stw     r1, 4(sp)
-    stw     r2, 8(sp)
-    stw     r3, 12(sp)
-    stw     r4, 16(sp)
-    stw     r5, 20(sp)
-    stw     r6, 24(sp)
-    stw     r7, 28(sp)
-    stw     r8, 32(sp)
-    stw     r9, 36(sp)
-    stw     r10, 40(sp)
-    stw     r11, 44(sp)
-    stw     r12, 48(sp)
-    stw     r13, 52(sp)
-    stw     r14, 56(sp)
-    stw     r15, 60(sp)
-    # Salva ea e estatus por último
-    stw     ea, 64(sp)
-    rdctl   r15, estatus
-    stw     r15, 68(sp)
+    stw     r8, 4(sp)
+    stw     r9, 8(sp)
+    stw     r10, 12(sp)
+    stw     r11, 16(sp)
+    stw     r12, 20(sp)
+    stw     ea, 24(sp)
+    rdctl   r12, estatus
+    stw     r12, 28(sp)
 
+    # Verifica se é interrupção de hardware
+    rdctl   r8, ipending
+    beq     r8, r0, OTHER_EXCEPTIONS
 
-    rdctl		et, ipending                    # Verifica se houve interrupcao externa
-    beq         et, r0, OTHER_EXCEPTIONS        # Se 0, não é interrupção de HW
+    # É interrupção de HW - ajusta ea
+    subi    ea, ea, 4
 
-    # É uma interrupção de hardware, decrementa o endereço de retorno
-    subi        ea, ea, 4
-
-CHECK_TIMER:
-    andi        r13, et, 1                   # Verifica se a IRQ0 (timer) está ativa
-    beq         r13, r0, CHECK_BUTTON        # Se não, checa outras interrupções
-    call		TIMER_ISR                    # Se sim, chama a ISR do Timer
-    br          END_HANDLER                  # Finaliza o tratamento
-
-CHECK_BUTTON:
-    andi        r13, et, 2                   # Verifica se a IRQ1 (botão) está ativa
-    beq         r13, r0, OTHER_INTERRUPTS    # Se não, checa outras interrupções
-    call        BUTTON_ISR                   # Se sim, chama a ISR do Botão
-    br          END_HANDLER                  # Finaliza o tratamento
-
+    # Verifica se é timer (IRQ0)
+    andi    r9, r8, 1
+    beq     r9, r0, OTHER_INTERRUPTS
+    
+    # TIMER ISR INLINE - MINIMALISTA
+    movia   r8, TIMER_BASE
+    movi    r9, 1
+    stwio   r9, 0(r8)                # Limpa flag TO - UMA VEZ APENAS!
+    
+    # Verifica se animação está ativa
+    movia   r8, FLAG_INTERRUPCAO
+    ldw     r9, (r8)
+    movi    r10, 1
+    bne     r9, r10, END_HANDLER     # Se não for animação, sai
+    
+    # ANIMAÇÃO MINIMALISTA
+    movia   r8, ANIMATION_STATE
+    ldw     r9, (r8)                 # Estado atual
+    
+    # Lê direção do SW0
+    movia   r10, SW_BASE
+    ldwio   r11, (r10)
+    andi    r11, r11, 1
+    
+    # Movimento baseado na direção
+    beq     r11, r0, MOVE_LEFT_RIGHT
+    
+MOVE_RIGHT_LEFT:
+    srli    r9, r9, 1               # Direita->Esquerda
+    bne     r9, r0, UPDATE_LEDS
+    movia   r9, 0x20000             # Reset no LED 17
+    br      UPDATE_LEDS
+    
+MOVE_LEFT_RIGHT:
+    slli    r9, r9, 1               # Esquerda->Direita  
+    movia   r10, 0x40000
+    bne     r9, r10, UPDATE_LEDS
+    movi    r9, 1                   # Reset no LED 0
+    
+UPDATE_LEDS:
+    stw     r9, (r8)                # Salva novo estado
+    movia   r8, LED_BASE
+    stwio   r9, (r8)                # Atualiza LEDs
+    br      END_HANDLER
 
 OTHER_INTERRUPTS:
-    br          END_HANDLER
-
 OTHER_EXCEPTIONS:
-    # Aqui você poderia tratar outras exceções (e.g. syscall, instrução ilegal)
-    br          END_HANDLER
+    # Tratamento mínimo para outras exceções
 
 END_HANDLER:
-    # Restaura o contexto na ordem inversa - Conforme Intel Documentation
-    ldw     r15, 68(sp)
-    wrctl   estatus, r15
-    ldw     ea, 64(sp)
-    ldw     r15, 60(sp)
-    ldw     r14, 56(sp)
-    ldw     r13, 52(sp)
-    ldw     r12, 48(sp)
-    ldw     r11, 44(sp)
-    ldw     r10, 40(sp)
-    ldw     r9, 36(sp)
-    ldw     r8, 32(sp)
-    ldw     r7, 28(sp)
-    ldw     r6, 24(sp)
-    ldw     r5, 20(sp)
-    ldw     r4, 16(sp)
-    ldw     r3, 12(sp)
-    ldw     r2, 8(sp)
-    ldw     r1, 4(sp)
+    # Restaura contexto
+    ldw     r12, 28(sp)
+    wrctl   estatus, r12
+    ldw     ea, 24(sp)
+    ldw     r12, 20(sp)
+    ldw     r11, 16(sp)
+    ldw     r10, 12(sp)
+    ldw     r9, 8(sp)
+    ldw     r8, 4(sp)
     ldw     ra, 0(sp)
-    addi    sp, sp, 76
+    addi    sp, sp, 32
 
     eret
-
-# ISR do Timer
-TIMER_ISR:
-    # IMPORTANTE: Limpa PRIMEIRO o flag de interrupção do timer
-    movia   r13, TIMER_BASE
-    movi    r14, 1              # Bit TO = 1 para limpar
-    stwio   r14, 0(r13)         # Limpa no status register (offset 0)
-
-    # Lógica da ISR do Timer
-    movia   r14, FLAG_INTERRUPCAO
-    ldw		r15, (r14)
-    movi    r14, 1
-    beq     r15, r14, TRATAR_ANIMACAO
-
-    movi    r14, 2
-    beq     r15, r14, TRATAR_CRONOMETRO
-    br      FIM_TIMER_ISR
-
-TRATAR_ANIMACAO:
-    # --- Lógica da Animação dos LEDs ---
-    # r10, r11, r12: Usados para a lógica.
-
-    # Carrega o estado atual da animação.
-    movia       r10, ANIMATION_STATE
-    ldw         r11, (r10)
-
-    # 1. Verifica a direção (baseado no Switch 0)
-    movia       r12, SW_BASE
-    ldwio       r13, (r12)
-    andi        r13, r13, 1         # Isola o bit 0 do switch
-    bne         r13, r0, DIREITA_ESQUERDA
-
-
-ESQUERDA_DIREITA:
-    # Desloca o bit para a esquerda (efeito visual: LED move da esquerda para direita).
-    slli        r11, r11, 1
-
-    # Verifica se passou do LED 17 (0x20000 = 2^17)
-    movia       r12, 0x40000       # Posição após LED17 (2^18)
-    bne         r11, r12, SALVAR_ESTADO_LED
-    movi        r11, 1             # Reinicia no LED 0
-    br          SALVAR_ESTADO_LED
-
-DIREITA_ESQUERDA:
-    # Desloca o bit para a direita (efeito visual: LED move da direita para esquerda).
-    srli        r11, r11, 1
-
-    # Se chegou a zero, reinicia no LED 17
-    bne         r11, r0, SALVAR_ESTADO_LED
-    movia       r11, 0x20000       # Reinicia no LED 17 (2^17)
-
-SALVAR_ESTADO_LED:
-    # Salva o novo estado da animação.
-    stw         r11, (r10)
-    # Atualiza os LEDs físicos.
-    movia       r12, LED_BASE
-    stwio       r11, (r12)
-    br          FIM_TIMER_ISR
-
-TRATAR_CRONOMETRO:
-    # Lógica para o cronômetro vai aqui
-    br FIM_TIMER_ISR
-
-FIM_TIMER_ISR:
-    # CORREÇÃO: Limpa apenas o flag TO (bit 0) do status register do timer
-    movia   r13, TIMER_BASE
-    movi    r14, 1              # Bit TO = 1 para limpar a interrupção
-    stwio   r14, 0(r13)         # Escreve no status register (offset 0)
-    ret
-
-# ISR do Botão
-BUTTON_ISR:
-    # Lógica da ISR do Botão vai aqui
-    ret

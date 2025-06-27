@@ -7,6 +7,7 @@
 
 .equ LED_BASE,         0x10000000
 .equ SW_BASE,          0x10000040
+.equ TIMER_BASE,       0x10002000
 
 _animacao:
     # O registrador r9 ainda aponta para a string de comando.
@@ -20,10 +21,10 @@ _animacao:
 
     # Se não for '0', assume que é para parar.
 PARAR_ANIMACAO:
-    # Para o timer para evitar interferência com UART
-    call        PARAR_TIMER_ANIMACAO
+    # Para o timer de forma ROBUSTA
+    call        PARAR_TIMER_SIMPLES
     
-    # Zera a flag de interrupção para parar de chamar a lógica da animação.
+    # Zera a flag de interrupção
     movia       r10, FLAG_INTERRUPCAO
     stw         r0, (r10)
 
@@ -33,96 +34,91 @@ PARAR_ANIMACAO:
     movia       r12, LED_BASE
     stwio       r11, (r12)
 
-    # Reseta o estado da animação para o início.
+    # Reseta o estado da animação
     movia       r10, ANIMATION_STATE
     stw         r0, (r10)
     br          FIM_ANIMACAO
 
 INICIAR_ANIMACAO:
-    # Salva o estado atual dos LEDs antes da animação
+    # Salva o estado atual dos LEDs
     movia       r10, LED_BASE
     ldwio       r11, (r10)
     movia       r12, LED_STATE
     stw         r11, (r12)
     
-    # Verifica direção inicial baseada no SW0
+    # Define posição inicial baseada na direção do SW0
     movia       r10, SW_BASE
     ldwio       r11, (r10)
     andi        r11, r11, 1        # Isola SW0
     
-    # Define posição inicial baseada na direção
     movia       r10, ANIMATION_STATE
-    beq         r11, r0, ESQUERDA_DIREITA_INIT
+    beq         r11, r0, INIT_LEFT_RIGHT
     
-DIREITA_ESQUERDA_INIT:
+INIT_RIGHT_LEFT:
     # SW0=1: Inicia da direita (LED 17)
-    movia       r11, 0x20000      # LED 17 = bit 17 = 2^17
-    br          SALVAR_ESTADO_INICIAL
+    movia       r11, 0x20000      # LED 17 = 2^17
+    br          SAVE_INITIAL
     
-ESQUERDA_DIREITA_INIT:
+INIT_LEFT_RIGHT:
     # SW0=0: Inicia da esquerda (LED 0)
-    movi        r11, 1            # LED 0 = bit 0 = 2^0
+    movi        r11, 1            # LED 0 = 2^0
 
-SALVAR_ESTADO_INICIAL:
+SAVE_INITIAL:
     stw         r11, (r10)        # Salva estado inicial
     movia       r12, LED_BASE
     stwio       r11, (r12)        # Acende LED inicial
 
-    # Inicia timer especificamente para animação
-    call        INICIALIZAR_TIMER_ANIMACAO
+    # Configura timer SIMPLES
+    call        INICIAR_TIMER_SIMPLES
     
-    # Define a flag para 1, ativando a animação na ISR do timer.
-    movia		r10, FLAG_INTERRUPCAO
-    movi		r11, 1
-    stw		    r11, (r10)
+    # Ativa animação
+    movia       r10, FLAG_INTERRUPCAO
+    movi        r11, 1
+    stw         r11, (r10)
 
 FIM_ANIMACAO:
     ret
 
 #========================================================================================================================================
-# Funções de Controle do Timer para Animação
+# Timer ULTRA-SIMPLES - Sem conflitos
 #========================================================================================================================================
-INICIALIZAR_TIMER_ANIMACAO:
-    # Configura timer específico para animação (200ms)
+INICIAR_TIMER_SIMPLES:
     movia       r8, TIMER_BASE
-    movia       r9, 10000000      # 200ms em 50MHz (10M ciclos)
-
-    # Para o timer antes de configurar
+    
+    # Para timer primeiro
     stwio       r0, 4(r8)
-
-    # Escreve os 16 bits inferiores do período
+    
+    # Período mais longo e seguro: 500ms (25M ciclos)
+    # Bits baixos
+    movia       r9, 25000000
     andi        r10, r9, 0xFFFF
-    stwio       r10, 8(r8)        # periodl (offset 8)
-
-    # Escreve os 16 bits superiores do período
+    stwio       r10, 8(r8)
+    
+    # Bits altos
     srli        r9, r9, 16
-    stwio       r9, 12(r8)        # periodh (offset 12)
-
-    # Limpa qualquer interrupção pendente
+    stwio       r9, 12(r8)
+    
+    # Limpa flag pendente
     movi        r9, 1
-    stwio       r9, 0(r8)         # Limpa TO bit
-
-    # Habilita interrupções do timer PRIMEIRO
-    movi        r15, 0b1
-    wrctl       ienable, r15      # Habilita IRQ0 (timer)
-    wrctl       status, r15       # Habilita interrupções globalmente
-
-    # Inicia o timer: START=1, CONT=1, ITO=1
-    movi        r9, 0b111
-    stwio       r9, 4(r8)         # control register (offset 4)
+    stwio       r9, 0(r8)
+    
+    # Habilita interrupções mínimas
+    movi        r9, 1
+    wrctl       ienable, r9
+    wrctl       status, r9
+    
+    # Inicia timer: START=1, CONT=1, ITO=1
+    movi        r9, 7
+    stwio       r9, 4(r8)
     ret
 
-PARAR_TIMER_ANIMACAO:
-    # Para APENAS o timer (sem desabilitar interrupções globais)
+PARAR_TIMER_SIMPLES:
     movia       r8, TIMER_BASE
     
-    # Limpa o flag de interrupção primeiro
+    # Limpa flag
     movi        r9, 1
-    stwio       r9, 0(r8)         # Limpa TO bit
+    stwio       r9, 0(r8)
     
-    # Para o timer preservando as configurações de período
-    movi        r9, 0b000         # START=0, CONT=0, ITO=0  
-    stwio       r9, 4(r8)         # Para o timer
+    # Para timer completamente
+    stwio       r0, 4(r8)
     ret
-
-.equ TIMER_BASE,    0x10002000
