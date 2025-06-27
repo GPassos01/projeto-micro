@@ -46,27 +46,22 @@
 # Saída: nenhuma
 #========================================================================================================================================
 _cronometro:
-    # --- Stack Frame Prologue (ABI Standard) ---
-    # Salva registradores callee-saved que serão usados
-    subi        sp, sp, 20
-    stw         fp, 16(sp)              # Frame pointer (callee-saved)
-    stw         ra, 12(sp)              # Return address (callee-saved)
-    stw         r16, 8(sp)              # s0 - Command pointer (callee-saved)
-    stw         r17, 4(sp)              # s1 - Operation (callee-saved)
-    stw         r18, 0(sp)              # s2 - Spare (callee-saved)
-    
-    # Configura frame pointer conforme ABI
+    # --- Stack Frame Prologue (ABI Compliant) ---
+    subi        sp, sp, 8
+    stw         ra, 4(sp)
+    stw         fp, 0(sp)
     mov         fp, sp
-    
-    # Copia argumento para registrador callee-saved
-    mov         r16, r4                 # r16 = comando string
-    
-    # Extrai operação do comando (segundo caractere)
-    call        EXTRAIR_OPERACAO_CRONOMETRO
-    mov         r17, r2                 # r17 = operação (0=iniciar, 1=cancelar)
-    
-    # Executa operação baseada no comando
-    beq         r17, r0, INICIAR_CRONOMETRO
+
+    # Registradores usados (Caller-Saved):
+    # r4: string de comando
+    # r8: operação (0 ou 1)
+
+    # Parseia a operação (char na posição 1)
+    ldb         r8, 1(r4)
+    subi        r8, r8, ASCII_ZERO      # Converte '0'/'1' para 0/1
+
+    # Executa a operação
+    beq         r8, r0, INICIAR_CRONOMETRO
     br          CANCELAR_CRONOMETRO
 
 #========================================================================================================================================
@@ -123,39 +118,8 @@ CRONOMETRO_JA_ATIVO:
 FIM_CRONOMETRO:
     # --- Stack Frame Epilogue (ABI Standard) ---
     # Restaura registradores na ordem inversa
-    ldw         r18, 0(fp)
-    ldw         r17, 4(fp)
-    ldw         r16, 8(fp)
-    ldw         ra, 12(fp)
-    ldw         fp, 16(fp)
-    addi        sp, sp, 20
-    ret
-
-#========================================================================================================================================
-# FUNÇÕES DE PARSING - ABI COMPLIANT
-#========================================================================================================================================
-
-#------------------------------------------------------------------------
-# Extrai operação do comando do cronômetro (segundo caractere)
-# Entrada: r16 = ponteiro para comando
-# Saída: r2 = operação (0=iniciar, 1=cancelar)
-#------------------------------------------------------------------------
-EXTRAIR_OPERACAO_CRONOMETRO:
-    # --- Stack Frame Prologue ---
-    subi        sp, sp, 8
-    stw         ra, 4(sp)
-    stw         r16, 0(sp)
-    
-    # Lê segundo caractere (posição 1)
-    addi        r16, r16, 1             # Aponta para posição 1
-    ldb         r1, (r16)               # Carrega caractere
-    
-    # Converte ASCII para número
-    subi        r2, r1, ASCII_ZERO      # r2 = operação
-    
-    # --- Stack Frame Epilogue ---
-    ldw         r16, 0(sp)
-    ldw         ra, 4(sp)
+    ldw         ra, 4(fp)
+    ldw         fp, 0(fp)
     addi        sp, sp, 8
     ret
 

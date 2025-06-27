@@ -62,8 +62,11 @@ _start:
 MAIN_LOOP:
     # --- 1. PROCESSA TICKS DE INTERRUPÇÃO (NÃO-BLOQUEANTE) ---
     call        PROCESSAR_TICKS_SISTEMA
+
+    # --- 2. PROCESSA BOTÕES (PAUSE/RESUME) ---
+    call        PROCESSAR_BOTOES
     
-    # --- 2. PROCESSA ENTRADA DA UART (NÃO-BLOQUEANTE) ---
+    # --- 3. PROCESSA ENTRADA DA UART (NÃO-BLOQUEANTE) ---
     call        PROCESSAR_CHAR_UART
     
     # Volta imediatamente para o início do loop para continuar o polling
@@ -461,6 +464,11 @@ BUFFER_ENTRADA:
 BUFFER_ENTRADA_POS:
     .word 0
 
+# Flag para debounce do KEY1
+.global KEY1_PRESSIONADO_FLAG
+KEY1_PRESSIONADO_FLAG:
+    .word 0
+
 # Tabela de codificação para displays 7-segmentos
 .global TABELA_7SEG
 TABELA_7SEG:
@@ -485,5 +493,63 @@ MSG_PROMPT:
 .extern _animacao  
 .extern _cronometro
 .extern _update_animation_step
+
+#========================================================================================================================================
+# NOVA ROTINA DE POLLING DOS BOTÕES
+#========================================================================================================================================
+PROCESSAR_BOTOES:
+    # --- Stack Frame ---
+    subi        sp, sp, 12
+    stw         ra, 8(sp)
+    stw         r8, 4(sp)
+    stw         r9, 0(sp)
+    
+    # Verifica se o cronômetro está ativo, se não, não faz nada
+    movia       r8, CRONOMETRO_ATIVO
+    ldw         r9, (r8)
+    beq         r9, r0, FIM_PROCESSA_BOTAO
+
+    # Lê o estado dos botões
+    movia       r8, KEY_BASE
+    ldwio       r9, (r8)
+    
+    # Isola KEY1 (bit 1)
+    andi        r9, r9, 0b10
+    beq         r9, r0, FIM_PROCESSA_BOTAO # Se não está pressionado, sai
+
+    # --- Lógica de Debounce e Toggle ---
+    # Para evitar múltiplos toggles, usamos uma flag estática
+    movia       r8, KEY1_PRESSIONADO_FLAG
+    ldw         r9, (r8)
+    bne         r9, r0, FIM_PROCESSA_BOTAO # Se já foi tratado, sai
+
+    # Marca que o botão foi tratado
+    movi        r9, 1
+    stw         r9, (r8)
+
+    # Inverte o estado de pausa (toggle)
+    movia       r8, CRONOMETRO_PAUSADO
+    ldw         r9, (r8)
+    xori        r9, r9, 1               # r9 = !r9
+    stw         r9, (r8)
+    
+FIM_PROCESSA_BOTAO:
+    # Lógica para resetar a flag de debounce quando o botão é solto
+    movia       r8, KEY_BASE
+    ldwio       r9, (r8)
+    andi        r9, r9, 0b10
+    bne         r9, r0, BOTAO_AINDA_PRESSIONADO
+    
+    # Botão foi solto, reseta a flag
+    movia       r8, KEY1_PRESSIONADO_FLAG
+    stw         r0, (r8)
+
+BOTAO_AINDA_PRESSIONADO:
+    # --- Epílogo ---
+    ldw         r9, 0(sp)
+    ldw         r8, 4(sp)
+    ldw         ra, 8(sp)
+    addi        sp, sp, 12
+    ret
 
 .end
