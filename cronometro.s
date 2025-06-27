@@ -1,5 +1,5 @@
 .global _cronometro
 
 _cronometro:
-
-ret
+    # TODO: Implementar lógica do cronômetro
+    ret

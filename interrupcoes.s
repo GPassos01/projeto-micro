@@ -1,4 +1,10 @@
+.set noat
+
 .global INTERRUPCAO_HANDLER
+
+# Referências para símbolos globais definidos em main.s
+.extern FLAG_INTERRUPCAO
+.extern ANIMATION_STATE
 
 .equ TIMER_BASE,	0x10002000
 .equ SW_BASE,		0x10000040

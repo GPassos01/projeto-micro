@@ -1,7 +1,9 @@
 .global _animacao
 
-.equ FLAG_INTERRUPCAO, 0x100004f8 # Endereço absoluto, ajuste se necessário
-.equ ANIMATION_STATE,  0x100004fc # Endereço absoluto, ajuste se necessário
+# Referências para símbolos globais definidos em main.s
+.extern FLAG_INTERRUPCAO
+.extern ANIMATION_STATE
+
 .equ LED_BASE,         0x10000000
 
 _animacao:
@@ -35,7 +37,8 @@ INICIAR_ANIMACAO:
     movia		r10, ANIMATION_STATE
     movi        r11, 1
     stw         r11, (r10)
-    stwio       r11, (LED_BASE) # Acende o primeiro LED imediatamente
+    movia       r12, LED_BASE
+    stwio       r11, (r12)      # Acende o primeiro LED imediatamente
 
     # Define a flag para 1, ativando a animação na ISR do timer.
     movia		r10, FLAG_INTERRUPCAO

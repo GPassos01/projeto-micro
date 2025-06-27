@@ -1,5 +1,8 @@
 .global _led
 
+# Referência para símbolo global definido em main.s
+.extern LED_STATE
+
 _led:
     addi        r9,     r9,  1 #0p 00
     
@@ -51,5 +54,5 @@ ATUALIZAR_LED:
     stwio       r16,    (r11)       # escreve nos LEDs
     stw		    r16,    (r13)       # salva na memória estado atual
 
-END_LED:
-ret
+FIM_LED:
+    ret

@@ -36,10 +36,8 @@ _start:
     # A pilha cresce para baixo, então começamos do endereço mais alto.
     movia       sp, 0x07FFFFFFC
 
-    # Configura o vetor de exceções para apontar para a nossa rotina de tratamento (ISR).
-    # Quando uma interrupção ocorrer, o processador pulará para INTERRUPCAO_HANDLER.
-    movia		r2, INTERRUPCAO_HANDLER # r2 = endereço de INTERRUPCAO_HANDLER
-    wrctl		evec, r2                # evec = r2
+    # Nota: O vetor de exceções é configurado no sistema SOPC/Platform Designer.
+    # A rotina INTERRUPCAO_HANDLER deve estar no endereço correto de exceção.
 
     # Inicializa e habilita o timer para gerar interrupções periódicas.
     call        INICIALIZAR_INTERRUPCAO_TEMPORIZADOR
