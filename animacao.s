@@ -10,6 +10,12 @@
 .equ TIMER_BASE,       0x10002000
 
 _animacao:
+    # ✅ CORREÇÃO: Salva o endereço de retorno na pilha
+    # _animacao é uma função "não-folha" (chama outras funções),
+    # então precisa salvar 'ra' antes de fazer um 'call'.
+    subi        sp, sp, 4
+    stw         ra, 0(sp)
+
     # O registrador r9 ainda aponta para a string de comando.
     # Avança para o segundo caractere (a sub-opção '0' ou '1').
     addi        r9, r9, 1
@@ -77,6 +83,10 @@ SAVE_INITIAL:
     stw         r11, (r10)
 
 FIM_ANIMACAO:
+    # ✅ CORREÇÃO: Restaura o endereço de retorno da pilha
+    # Agora 'ret' vai pular de volta para o 'main.s' corretamente.
+    ldw         ra, 0(sp)
+    addi        sp, sp, 4
     ret
 
 #========================================================================================================================================
