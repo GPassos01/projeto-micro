@@ -1,337 +1,373 @@
 #========================================================================================================================================
-# PROJETO MICROPROCESSADORES - NIOS II ASSEMBLY (VERSÃO AUDITADA ABI)
-# Arquivo: animacao_abi.s
+# PROJETO MICROPROCESSADORES - NIOS II ASSEMBLY  
+# Arquivo: animacao.s
 # Descrição: Sistema de Animação de LEDs com Timer
-# ABI Compliant: SIM - 100% conforme com Nios II ABI rev. 2022
-# Funcionalidades: Iniciar animação (10), Parar animação (11), direção por SW0
-# Revisão: CRÍTICA - Exclusão mútua, estado preservado, validações completas
+# ABI Compliant: Sim - Seguindo convenções rigorosas da ABI Nios II
 #========================================================================================================================================
 
-# CRÍTICO: Impede uso automático de r1 (assembler temporary)
-.set noat
-
-# Símbolos exportados
-.global animacao
+.global _animacao
 .global _update_animation_step
-.global RESTAURAR_ESTADO_LEDS           # Exporta para uso pelo cronômetro
 
-# Símbolos externos necessários
-.extern LED_STATE                       # Estado atual dos LEDs (main.s)
-.extern ANIMATION_STATE                 # Estado da animação (interrupcoes.s)
-.extern FLAG_INTERRUPCAO                # Flag de animação ativa (interrupcoes.s)
-.extern CRONOMETRO_ATIVO                # Flag cronômetro ativo (interrupcoes.s)
-.extern CONFIGURAR_TIMER                # Configuração do timer (interrupcoes.s)
-.extern PARAR_TIMER                     # Parada do timer (interrupcoes.s)
+# Referências para símbolos globais definidos em interrupcoes.s
+.extern FLAG_INTERRUPCAO
+.extern ANIMATION_STATE  
+.extern LED_STATE             # Definido em main.s
 
 #========================================================================================================================================
-# MAPEAMENTO DE PERIFÉRICOS E CONSTANTES
+# Definições e Constantes
 #========================================================================================================================================
-.equ LED_BASE,              0x10000000  # Base dos 18 LEDs vermelhos
-.equ SW_BASE,               0x10000040  # Base dos switches
-.equ ASCII_ZERO,            0x30         # Valor ASCII do '0'
-.equ ASCII_SPACE,           0x20         # Valor ASCII do espaço ' '
-.equ ANIMACAO_PERIODO,      10000000     # 200ms @ 50MHz (baseado em Cornell specs)
+.equ LED_BASE,              0x10000000
+.equ SW_BASE,               0x10000040
+.equ TIMER_BASE,            0x10002000
+
+# Configurações de timing
+.equ ANIMACAO_PERIODO,      10000000        # 200ms a 50MHz (10M ciclos)
+
+# Direções da animação
+.equ ESQUERDA_DIREITA,      0               # SW0=0: LED 0->1->2...->17->0
+.equ DIREITA_ESQUERDA,      1               # SW0=1: LED 17->16->15...->0->17
+
+# Posições dos LEDs
+.equ LED_MIN,               0               # LED mínimo
+.equ LED_MAX,               17              # LED máximo
 
 #========================================================================================================================================
-# FUNÇÃO PRINCIPAL DE CONTROLE DA ANIMAÇÃO - ABI COMPLIANT
-# Entrada: r4 = ponteiro para string de comando ("10" ou "11")
+# FUNÇÃO PRINCIPAL DE ANIMAÇÃO - ABI COMPLIANT
+# Entrada: r4 = ponteiro para string de comando (ABI padrão)
 # Saída: nenhuma
-# Formato esperado:
-#   - "10" ou "10 " = iniciar animação (direção determinada por SW0)
-#   - "11" ou "11 " = parar animação e restaurar estado anterior
-# Direção: SW0=0 (esquerda→direita), SW0=1 (direita→esquerda)
 #========================================================================================================================================
-animacao:
-    # === PRÓLOGO ABI COMPLETO ===
-    subi        sp, sp, 32              # Aloca 32 bytes na stack (múltiplo de 4)
-    stw         ra, 28(sp)              # Salva return address
-    stw         fp, 24(sp)              # Salva frame pointer
-    stw         r16, 20(sp)             # Salva r16 (ponteiro comando)
-    stw         r17, 16(sp)             # Salva r17 (operação parseada)
-    stw         r18, 12(sp)             # Salva r18 (temporário)
-    stw         r19, 8(sp)              # Salva r19 (temporário)
-    stw         r20, 4(sp)              # Salva r20 (temporário)
-    stw         r21, 0(sp)              # Salva r21 (temporário)
+_animacao:
+    # --- Stack Frame Prologue (ABI Standard) ---
+    # Salva registradores callee-saved que serão usados
+    subi        sp, sp, 20
+    stw         fp, 16(sp)              # Frame pointer (callee-saved)
+    stw         ra, 12(sp)              # Return address (callee-saved)
+    stw         r16, 8(sp)              # s0 (callee-saved)
+    stw         r17, 4(sp)              # s1 (callee-saved)
+    stw         r18, 0(sp)              # s2 (callee-saved)
     
-    # Estabelece frame pointer
-    mov         fp, sp                  # fp aponta para stack frame atual
+    # Configura frame pointer conforme ABI
+    mov         fp, sp
     
-    # === COPIA PARÂMETRO PARA REGISTRADOR CALLEE-SAVED ===
-    mov         r16, r4                 # r16 = ponteiro comando
+    # Copia argumento para registrador callee-saved
+    mov         r16, r4                 # r16 = comando string
     
-    # === PARSING DA OPERAÇÃO COM ESPAÇO OPCIONAL ===
-    # Suporta formatos "1x" e "1 x" (com espaço após '1')
-    ldb         r17, 1(r16)             # r17 = segundo caractere
-    movi        r18, ASCII_SPACE        # r18 = ASCII espaço
-    bne         r17, r18, PARSE_ANIM_OK # Se não é espaço, continua
+    # Extrai sub-comando (segundo caractere)
+    addi        r16, r16, 1             # Aponta para segundo caractere
+    ldb         r17, (r16)              # r17 = sub-comando ('0' ou '1')
     
-    # Se segundo caractere é espaço, pega o terceiro
-    ldb         r17, 2(r16)             # r17 = terceiro caractere
+    # Compara sub-comando com '0' (ASCII 0x30)
+    movi        r18, '0'
+    beq         r17, r18, INICIAR_ANIMACAO
     
-PARSE_ANIM_OK:
-    # Converte ASCII para valor numérico
-    subi        r17, r17, ASCII_ZERO    # r17 = operação (0 ou 1)
-    
-    # === DISPATCH DA OPERAÇÃO ===
-    beq         r17, r0, INICIAR_ANIMACAO    # Se operação = 0, inicia
-    br          PARAR_ANIMACAO              # Senão, para animação
-    
-INICIAR_ANIMACAO:
-    # === VERIFICA SE ANIMAÇÃO JÁ ESTÁ ATIVA ===
-    movia       r18, FLAG_INTERRUPCAO   # r18 = ponteiro flag animação
-    ldw         r19, (r18)              # r19 = status atual
-    bne         r19, r0, ANIM_JA_ATIVA  # Se já ativa, não faz nada
-    
-    # === DESATIVA CRONÔMETRO SE ESTIVER ATIVO ===
-    # EXCLUSÃO MÚTUA: animação e cronômetro não podem usar timer simultaneamente
-    movia       r18, CRONOMETRO_ATIVO   # r18 = ponteiro flag cronômetro
-    ldw         r19, (r18)              # r19 = status cronômetro
-    beq         r19, r0, CONTINUAR_INICIO_ANIM # Se cronômetro desativo, continua
-    
-    # Desativa cronômetro
-    stw         r0, (r18)               # CRONOMETRO_ATIVO = 0
-    call        PARAR_TIMER             # Para timer do cronômetro
-    
-CONTINUAR_INICIO_ANIM:
-    # === SALVA ESTADO ATUAL DOS LEDs ===
-    # IMPORTANTE: preserva estado para restauração posterior
-    call        SALVAR_ESTADO_LEDS      # Salva estado atual em variável local
-    
-    # === DETERMINA DIREÇÃO BASEADA EM SW0 ===
-    call        DETERMINAR_POSICAO_INICIAL # Configura posição inicial
-    
-    # === ATIVA FLAG DE ANIMAÇÃO ===
-    movia       r18, FLAG_INTERRUPCAO   # r18 = ponteiro flag
-    movi        r19, 1                  # r19 = 1 (ativo)
-    stw         r19, (r18)              # FLAG_INTERRUPCAO = 1
-    
-    # === CONFIGURAÇÃO E INÍCIO DO TIMER ===
-    movia       r4, ANIMACAO_PERIODO    # r4 = período de 200ms (ABI)
-    call        CONFIGURAR_TIMER        # Configura timer para animação
-    
-    br          FIM_ANIMACAO_ABI        # Finaliza comando
-    
-ANIM_JA_ATIVA:
-    # Se animação já está ativa, comando é ignorado
-    br          FIM_ANIMACAO_ABI
-    
-PARAR_ANIMACAO:
-    # === VERIFICA SE ANIMAÇÃO ESTÁ ATIVA ===
-    movia       r18, FLAG_INTERRUPCAO   # r18 = ponteiro flag
-    ldw         r19, (r18)              # r19 = status atual
-    beq         r19, r0, FIM_ANIMACAO_ABI # Se já parada, nada a fazer
-    
-    # === DESATIVA FLAG DE ANIMAÇÃO ===
-    stw         r0, (r18)               # FLAG_INTERRUPCAO = 0
-    
-    # === PARA TIMER DE FORMA SEGURA ===
-    call        PARAR_TIMER             # Para timer e desabilita interrupções
-    
-    # === RESTAURA ESTADO ANTERIOR DOS LEDs ===
-    call        RESTAURAR_ESTADO_LEDS   # Restaura LEDs ao estado anterior
-    
-    # === RESETA ESTADO DA ANIMAÇÃO ===
-    movia       r18, ANIMATION_STATE    # r18 = ponteiro estado animação
-    stw         r0, (r18)               # ANIMATION_STATE = 0
-    
-FIM_ANIMACAO_ABI:
-    # === EPÍLOGO ABI COMPLETO ===
-    ldw         r21, 0(sp)              # Restaura r21
-    ldw         r20, 4(sp)              # Restaura r20
-    ldw         r19, 8(sp)              # Restaura r19
-    ldw         r18, 12(sp)             # Restaura r18
-    ldw         r17, 16(sp)             # Restaura r17
-    ldw         r16, 20(sp)             # Restaura r16
-    ldw         fp, 24(sp)              # Restaura frame pointer
-    ldw         ra, 28(sp)              # Restaura return address
-    addi        sp, sp, 32              # Libera stack frame
-    ret                                 # Retorna ao chamador
+    # Se não for '0', assume comando para parar
+    br          PARAR_ANIMACAO
 
 #========================================================================================================================================
-# ATUALIZAÇÃO DO PASSO DA ANIMAÇÃO - ABI COMPLIANT
-# Entrada: nenhuma (chamada pela ISR via main loop)
-# Saída: nenhuma (atualiza LEDs e ANIMATION_STATE)
-# Função: Move LED ativo para próxima posição baseado na direção SW0
-# Otimizada para latência mínima (chamada frequentemente)
+# INICIALIZAÇÃO DA ANIMAÇÃO
+#========================================================================================================================================
+INICIAR_ANIMACAO:
+    # Verifica se animação já está ativa
+    movia       r1, FLAG_INTERRUPCAO
+    ldw         r2, (r1)
+    bne         r2, r0, ANIM_JA_ATIVA    # Se já ativa, não faz nada
+    
+    # Salva estado atual dos LEDs antes de iniciar animação
+    call        SALVAR_ESTADO_LEDS
+    
+    # Determina posição inicial baseada na direção do SW0
+    call        DETERMINAR_POSICAO_INICIAL
+    
+    # Configura e inicia timer da animação
+    call        CONFIGURAR_TIMER_ANIMACAO
+    
+    # Ativa flag de animação
+    movia       r1, FLAG_INTERRUPCAO
+    movi        r2, 1
+    stw         r2, (r1)
+    
+    br          FIM_ANIMACAO
+
+#========================================================================================================================================
+# PARADA DA ANIMAÇÃO
+#========================================================================================================================================
+PARAR_ANIMACAO:
+    # Para timer de forma robusta
+    call        PARAR_TIMER_ANIMACAO
+    
+    # Desativa flag de animação
+    movia       r1, FLAG_INTERRUPCAO
+    stw         r0, (r1)
+    
+    # Restaura estado anterior dos LEDs
+    call        RESTAURAR_ESTADO_LEDS
+    
+    # Reseta estado da animação
+    movia       r1, ANIMATION_STATE
+    stw         r0, (r1)
+
+ANIM_JA_ATIVA:
+    # Animação já estava ativa, não faz nada
+    
+FIM_ANIMACAO:
+    # --- Stack Frame Epilogue (ABI Standard) ---
+    # Restaura registradores na ordem inversa
+    ldw         r18, 0(fp)
+    ldw         r17, 4(fp)
+    ldw         r16, 8(fp)
+    ldw         ra, 12(fp)
+    ldw         fp, 16(fp)
+    addi        sp, sp, 20
+    ret
+
+#========================================================================================================================================
+# FUNÇÃO DE ATUALIZAÇÃO DA ANIMAÇÃO - ABI COMPLIANT  
+# Chamada pelo main loop a cada tick do timer
+# Entrada: nenhuma
+# Saída: nenhuma
 #========================================================================================================================================
 _update_animation_step:
-    # === PRÓLOGO ABI OTIMIZADO ===
-    subi        sp, sp, 20              # Aloca 20 bytes na stack
-    stw         ra, 16(sp)              # Salva return address
-    stw         r16, 12(sp)             # Salva r16 (estado atual)
-    stw         r17, 8(sp)              # Salva r17 (switches)
-    stw         r18, 4(sp)              # Salva r18 (temporário)
-    stw         r19, 0(sp)              # Salva r19 (temporário)
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 16
+    stw         fp, 12(sp)
+    stw         ra, 8(sp)
+    stw         r16, 4(sp)              # Estado atual
+    stw         r17, 0(sp)              # Direção
     
-    # === VERIFICA SE ANIMAÇÃO ESTÁ ATIVA ===
-    # PROTEÇÃO: só atualiza se realmente ativa
-    movia       r17, FLAG_INTERRUPCAO   # r17 = ponteiro flag
-    ldw         r18, (r17)              # r18 = status animação
-    beq         r18, r0, FIM_UPDATE_ANIM # Se desativa, sai imediatamente
+    mov         fp, sp
     
-    # === CARREGA ESTADO ATUAL DA ANIMAÇÃO ===
-    movia       r17, ANIMATION_STATE    # r17 = ponteiro estado
-    ldw         r16, (r17)              # r16 = estado atual (máscara LED)
+    # Carrega estado atual da animação
+    movia       r1, ANIMATION_STATE
+    ldw         r16, (r1)
     
-    # === LÊ DIREÇÃO DO SW0 ===
-    movia       r17, SW_BASE            # r17 = base dos switches
-    ldwio       r18, (r17)              # r18 = estado dos switches
-    andi        r18, r18, 1             # r18 = SW0 (bit 0)
+    # Lê direção do switch SW0
+    call        LER_DIRECAO_SW0
+    mov         r17, r2                 # r17 = direção (0 ou 1)
     
-    # === MOVE BASEADO NA DIREÇÃO ===
-    beq         r18, r0, MOVER_ESQUERDA_DIREITA # SW0=0: esq→dir
-    br          MOVER_DIREITA_ESQUERDA          # SW0=1: dir→esq
-    
-MOVER_ESQUERDA_DIREITA:
-    # === MOVIMENTO ESQUERDA → DIREITA (LED 0→1→...→17→0) ===
-    slli        r16, r16, 1             # Desloca bit para esquerda
-    movia       r18, 0x40000            # r18 = 2^18 (overflow após LED 17)
-    bne         r16, r18, ATUALIZAR_LEDS_ANIM # Se não overflow, continua
-    
-    # Se passou do LED 17, volta para LED 0
-    movi        r16, 1                  # r16 = 2^0 = LED 0
-    br          ATUALIZAR_LEDS_ANIM
+    # Processa movimento baseado na direção
+    beq         r17, r0, MOVER_ESQUERDA_DIREITA
     
 MOVER_DIREITA_ESQUERDA:
-    # === MOVIMENTO DIREITA → ESQUERDA (LED 17→16→...→1→0→17) ===
+    # Move da direita para esquerda (LED 17->16->...->0->17)
     srli        r16, r16, 1             # Desloca bit para direita
-    bne         r16, r0, ATUALIZAR_LEDS_ANIM # Se não underflow, continua
+    bne         r16, r0, ATUALIZAR_LEDS_ANIM
     
-    # Se passou do LED 0, volta para LED 17
-    movia       r16, 0x20000            # r16 = 2^17 = LED 17
+    # Se chegou em 0, volta para LED 17
+    movia       r16, 0x20000            # 2^17 = LED 17
+    br          ATUALIZAR_LEDS_ANIM
+    
+MOVER_ESQUERDA_DIREITA:
+    # Move da esquerda para direita (LED 0->1->...->17->0)
+    slli        r16, r16, 1             # Desloca bit para esquerda
+    movia       r1, 0x40000             # 2^18 (overflow)
+    bne         r16, r1, ATUALIZAR_LEDS_ANIM
+    
+    # Se passou do LED 17, volta para LED 0
+    movi        r16, 1                  # 2^0 = LED 0
     
 ATUALIZAR_LEDS_ANIM:
-    # === SALVA NOVO ESTADO ===
-    movia       r17, ANIMATION_STATE    # r17 = ponteiro estado
-    stw         r16, (r17)              # Atualiza estado da animação
+    # Salva novo estado
+    movia       r1, ANIMATION_STATE
+    stw         r16, (r1)
     
-    # === ATUALIZA LEDs FÍSICOS ===
-    movia       r17, LED_BASE           # r17 = base dos LEDs
-    stwio       r16, (r17)              # Escreve novo padrão nos LEDs
+    # Atualiza LEDs físicos
+    movia       r1, LED_BASE
+    stwio       r16, (r1)
     
-FIM_UPDATE_ANIM:
-    # === EPÍLOGO ABI OTIMIZADO ===
-    ldw         r19, 0(sp)              # Restaura r19
-    ldw         r18, 4(sp)              # Restaura r18
-    ldw         r17, 8(sp)              # Restaura r17
-    ldw         r16, 12(sp)             # Restaura r16
-    ldw         ra, 16(sp)              # Restaura return address
-    addi        sp, sp, 20              # Libera stack frame
-    ret                                 # Retorna ao chamador
+    # --- Stack Frame Epilogue ---
+    ldw         r17, 0(fp)
+    ldw         r16, 4(fp)
+    ldw         ra, 8(fp)
+    ldw         fp, 12(fp)
+    addi        sp, sp, 16
+    ret
 
 #========================================================================================================================================
-# DETERMINAÇÃO DA POSIÇÃO INICIAL - ABI COMPLIANT
-# Entrada: nenhuma (lê SW0)
-# Saída: nenhuma (configura ANIMATION_STATE)
-# Função: Define posição inicial baseada na direção escolhida
+# FUNÇÕES DE SUPORTE - ABI COMPLIANT
 #========================================================================================================================================
-DETERMINAR_POSICAO_INICIAL:
-    # === PRÓLOGO ABI MÍNIMO ===
-    subi        sp, sp, 12              # Aloca 12 bytes na stack
-    stw         ra, 8(sp)               # Salva return address
-    stw         r16, 4(sp)              # Salva r16
-    stw         r17, 0(sp)              # Salva r17
-    
-    # === LÊ DIREÇÃO DO SW0 ===
-    movia       r16, SW_BASE            # r16 = base dos switches
-    ldwio       r17, (r16)              # r17 = estado dos switches
-    andi        r17, r17, 1             # r17 = SW0 (bit 0)
-    
-    # === CONFIGURA POSIÇÃO INICIAL ===
-    movia       r16, ANIMATION_STATE    # r16 = ponteiro estado
-    
-    beq         r17, r0, INICIO_ESQUERDA # SW0=0: inicia no LED 0
-    # SW0=1: inicia no LED 17
-    movia       r17, 0x20000            # r17 = 2^17 = LED 17
-    stw         r17, (r16)              # ANIMATION_STATE = LED 17
-    br          FIM_POSICAO_INICIAL
-    
-INICIO_ESQUERDA:
-    # Inicia no LED 0
-    movi        r17, 1                  # r17 = 2^0 = LED 0
-    stw         r17, (r16)              # ANIMATION_STATE = LED 0
-    
-FIM_POSICAO_INICIAL:
-    # === EPÍLOGO ABI ===
-    ldw         r17, 0(sp)              # Restaura r17
-    ldw         r16, 4(sp)              # Restaura r16
-    ldw         ra, 8(sp)               # Restaura return address
-    addi        sp, sp, 12              # Libera stack frame
-    ret                                 # Retorna ao chamador
 
-#========================================================================================================================================
-# SALVAMENTO DO ESTADO DOS LEDs - ABI COMPLIANT
-# Entrada: nenhuma (lê LED_STATE)
-# Saída: nenhuma (salva em LED_STATE_BACKUP)
-# Função: Preserva estado atual para restauração posterior
-#========================================================================================================================================
+#------------------------------------------------------------------------
+# Salva estado atual dos LEDs
+#------------------------------------------------------------------------
 SALVAR_ESTADO_LEDS:
-    # === PRÓLOGO ABI MÍNIMO ===
-    subi        sp, sp, 12              # Aloca 12 bytes na stack
-    stw         ra, 8(sp)               # Salva return address
-    stw         r16, 4(sp)              # Salva r16
-    stw         r17, 0(sp)              # Salva r17
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 8
+    stw         ra, 4(sp)
+    stw         r16, 0(sp)
     
-    # === CARREGA ESTADO ATUAL ===
-    movia       r16, LED_STATE          # r16 = ponteiro estado atual
-    ldw         r17, (r16)              # r17 = estado dos LEDs
+    # Lê estado atual dos LEDs
+    movia       r16, LED_BASE
+    ldwio       r1, (r16)
     
-    # === SALVA EM BACKUP ===
-    movia       r16, LED_STATE_BACKUP   # r16 = ponteiro backup
-    stw         r17, (r16)              # LED_STATE_BACKUP = estado atual
+    # Salva na variável LED_STATE
+    movia       r16, LED_STATE
+    stw         r1, (r16)
     
-    # === EPÍLOGO ABI ===
-    ldw         r17, 0(sp)              # Restaura r17
-    ldw         r16, 4(sp)              # Restaura r16
-    ldw         ra, 8(sp)               # Restaura return address
-    addi        sp, sp, 12              # Libera stack frame
-    ret                                 # Retorna ao chamador
+    # --- Stack Frame Epilogue ---
+    ldw         r16, 0(sp)
+    ldw         ra, 4(sp)
+    addi        sp, sp, 8
+    ret
 
-#========================================================================================================================================
-# RESTAURAÇÃO DO ESTADO DOS LEDs - ABI COMPLIANT
-# Entrada: nenhuma (lê LED_STATE_BACKUP)
-# Saída: nenhuma (restaura LED_STATE e hardware)
-# Função: Restaura estado anterior à animação
-#========================================================================================================================================
+#------------------------------------------------------------------------
+# Restaura estado anterior dos LEDs
+#------------------------------------------------------------------------
 RESTAURAR_ESTADO_LEDS:
-    # === PRÓLOGO ABI MÍNIMO ===
-    subi        sp, sp, 12              # Aloca 12 bytes na stack
-    stw         ra, 8(sp)               # Salva return address
-    stw         r16, 4(sp)              # Salva r16
-    stw         r17, 0(sp)              # Salva r17
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 8
+    stw         ra, 4(sp)
+    stw         r16, 0(sp)
     
-    # === CARREGA ESTADO BACKUP ===
-    movia       r16, LED_STATE_BACKUP   # r16 = ponteiro backup
-    ldw         r17, (r16)              # r17 = estado salvo
+    # Carrega estado salvo
+    movia       r16, LED_STATE
+    ldw         r1, (r16)
     
-    # === RESTAURA ESTADO ATUAL ===
-    movia       r16, LED_STATE          # r16 = ponteiro estado atual
-    stw         r17, (r16)              # LED_STATE = estado salvo
+    # Restaura nos LEDs físicos
+    movia       r16, LED_BASE
+    stwio       r1, (r16)
     
-    # === ATUALIZA HARDWARE ===
-    movia       r16, LED_BASE           # r16 = base dos LEDs
-    stwio       r17, (r16)              # Restaura LEDs físicos
+    # --- Stack Frame Epilogue ---
+    ldw         r16, 0(sp)
+    ldw         ra, 4(sp)
+    addi        sp, sp, 8
+    ret
+
+#------------------------------------------------------------------------
+# Determina posição inicial baseada no SW0
+#------------------------------------------------------------------------
+DETERMINAR_POSICAO_INICIAL:
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 8
+    stw         ra, 4(sp)
+    stw         r16, 0(sp)
     
-    # === EPÍLOGO ABI ===
-    ldw         r17, 0(sp)              # Restaura r17
-    ldw         r16, 4(sp)              # Restaura r16
-    ldw         ra, 8(sp)               # Restaura return address
-    addi        sp, sp, 12              # Libera stack frame
-    ret                                 # Retorna ao chamador
+    # Lê direção do SW0
+    call        LER_DIRECAO_SW0
+    mov         r16, r2                 # r16 = direção
+    
+    beq         r16, r0, INIT_ESQUERDA_DIREITA
+    
+INIT_DIREITA_ESQUERDA:
+    # SW0=1: Inicia da direita (LED 17)
+    movia       r1, 0x20000             # 2^17 = LED 17
+    br          SALVAR_POSICAO_INICIAL
+    
+INIT_ESQUERDA_DIREITA:
+    # SW0=0: Inicia da esquerda (LED 0)
+    movi        r1, 1                   # 2^0 = LED 0
+    
+SALVAR_POSICAO_INICIAL:
+    # Salva posição inicial
+    movia       r16, ANIMATION_STATE
+    stw         r1, (r16)
+    
+    # Acende LED inicial
+    movia       r16, LED_BASE
+    stwio       r1, (r16)
+    
+    # --- Stack Frame Epilogue ---
+    ldw         r16, 0(sp)
+    ldw         ra, 4(sp)
+    addi        sp, sp, 8
+    ret
+
+#------------------------------------------------------------------------
+# Lê direção do switch SW0
+# Saída: r2 = direção (0 = esq->dir, 1 = dir->esq)
+#------------------------------------------------------------------------
+LER_DIRECAO_SW0:
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 8
+    stw         ra, 4(sp)
+    stw         r16, 0(sp)
+    
+    # Lê estado dos switches
+    movia       r16, SW_BASE
+    ldwio       r1, (r16)
+    
+    # Isola SW0 (bit 0)
+    andi        r2, r1, 1
+    
+    # --- Stack Frame Epilogue ---
+    ldw         r16, 0(sp)
+    ldw         ra, 4(sp)
+    addi        sp, sp, 8
+    ret
 
 #========================================================================================================================================
-# SEÇÃO DE DADOS - VARIÁVEIS LOCAIS
+# FUNÇÕES DE TIMER - ABI COMPLIANT
 #========================================================================================================================================
-.section .data
-.align 4                                # CRÍTICO: Alinhamento em 4 bytes
 
-# === BACKUP DO ESTADO DOS LEDs ===
-# Usado para restaurar estado anterior quando animação para
-.global LED_STATE_BACKUP
-LED_STATE_BACKUP:
-    .word 0                             # Estado dos LEDs antes da animação
+#------------------------------------------------------------------------
+# Configura e inicia timer para animação
+#------------------------------------------------------------------------
+CONFIGURAR_TIMER_ANIMACAO:
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 12
+    stw         ra, 8(sp)
+    stw         r16, 4(sp)
+    stw         r17, 0(sp)
+    
+    movia       r16, TIMER_BASE
+    
+    # Para timer primeiro (segurança)
+    stwio       r0, 4(r16)              # Control = 0
+    
+    # Configura período (200ms = 10M ciclos a 50MHz)
+    movia       r17, ANIMACAO_PERIODO
+    
+    # Bits baixos do período
+    andi        r1, r17, 0xFFFF
+    stwio       r1, 8(r16)              # periodl
+    
+    # Bits altos do período  
+    srli        r17, r17, 16
+    stwio       r17, 12(r16)            # periodh
+    
+    # Limpa flag de timeout pendente
+    movi        r1, 1
+    stwio       r1, 0(r16)              # status = 1 (limpa TO)
+    
+    # Habilita interrupções do timer
+    movi        r1, 1                   # IRQ0 para timer
+    wrctl       ienable, r1
+    wrctl       status, r1              # Habilita PIE
+    
+    # Inicia timer: START=1, CONT=1, ITO=1
+    movi        r1, 7                   # 0b111
+    stwio       r1, 4(r16)              # control
+    
+    # --- Stack Frame Epilogue ---
+    ldw         r17, 0(sp)
+    ldw         r16, 4(sp)
+    ldw         ra, 8(sp)
+    addi        sp, sp, 12
+    ret
 
-#========================================================================================================================================
-# FIM DO ARQUIVO - ANIMAÇÃO ABI COMPLIANT
-#========================================================================================================================================
-.end 
+#------------------------------------------------------------------------
+# Para timer da animação de forma robusta
+#------------------------------------------------------------------------
+PARAR_TIMER_ANIMACAO:
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 8
+    stw         ra, 4(sp)
+    stw         r16, 0(sp)
+    
+    movia       r16, TIMER_BASE
+    
+    # Para timer primeiro
+    stwio       r0, 4(r16)              # control = 0
+    
+    # Limpa flag de timeout
+    movi        r1, 1
+    stwio       r1, 0(r16)              # status = 1
+    
+    # Desabilita interrupções do timer
+    wrctl       ienable, r0             # Desabilita todas IRQs
+    wrctl       status, r0              # Desabilita PIE
+    
+    # --- Stack Frame Epilogue ---
+    ldw         r16, 0(sp)
+    ldw         ra, 4(sp)
+    addi        sp, sp, 8
+    ret

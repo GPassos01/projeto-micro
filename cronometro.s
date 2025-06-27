@@ -1,308 +1,422 @@
 #========================================================================================================================================
-# PROJETO MICROPROCESSADORES - NIOS II ASSEMBLY (VERSÃO AUDITADA ABI)
-# Arquivo: cronometro_abi.s
+# PROJETO MICROPROCESSADORES - NIOS II ASSEMBLY
+# Arquivo: cronometro.s
 # Descrição: Sistema de Cronômetro com Displays 7-Segmentos
-# ABI Compliant: SIM - 100% conforme com Nios II ABI rev. 2022
+# ABI Compliant: Sim - Seguindo convenções rigorosas da ABI Nios II
 # Funcionalidades: Iniciar (20), Cancelar (21), Pausar/Retomar (KEY1)
-# Revisão: CRÍTICA - Parsing robusto, exclusão mútua, validações completas
 #========================================================================================================================================
 
-# CRÍTICO: Impede uso automático de r1 (assembler temporary)
-.set noat
+.global _cronometro
 
-# Símbolos exportados
-.global cronometro
-
-# Símbolos externos necessários
-.extern CRONOMETRO_ATIVO                # Flag de ativação (interrupcoes.s)
-.extern CRONOMETRO_PAUSADO              # Flag de pausa (interrupcoes.s) 
-.extern CRONOMETRO_SEGUNDOS             # Contador de segundos (interrupcoes.s)
-.extern CONFIGURAR_TIMER                # Configuração do timer (interrupcoes.s)
-.extern PARAR_TIMER                     # Parada do timer (interrupcoes.s)
-.extern FLAG_INTERRUPCAO                # Flag de animação ativa
-.extern RESTAURAR_ESTADO_LEDS           # Restaura LEDs salvos (animacao.s)
+# Referências para símbolos globais definidos em interrupcoes.s
+.extern CRONOMETRO_SEGUNDOS
+.extern CRONOMETRO_PAUSADO
+.extern CRONOMETRO_ATIVO
+.extern CRONOMETRO_TICK_FLAG
 
 #========================================================================================================================================
-# MAPEAMENTO DE PERIFÉRICOS E CONSTANTES
+# Definições e Constantes
 #========================================================================================================================================
-.equ HEX_BASE,              0x10000020  # Base dos displays 7-segmentos
-.equ ASCII_ZERO,            0x30         # Valor ASCII do '0'
-.equ ASCII_SPACE,           0x20         # Valor ASCII do espaço ' '
-.equ CRONOMETRO_PERIODO,    50000000     # 1 segundo @ 50MHz
+.equ HEX_BASE,              0x10000020      # Displays 7-segmentos (HEX3-0)
+.equ KEY_BASE,              0x10000050      # Botões (KEY3-0)
+.equ TIMER_BASE,            0x10002000      # Timer do sistema
+
+# Configurações de timing
+.equ CRONOMETRO_PERIODO,    50000000        # 1s a 50MHz (50M ciclos)
+
+# Limites do cronômetro
+.equ CRONOMETRO_MAX,        5999            # 99:59 (99*60 + 59 = 5999 segundos)
+
+# Operações do cronômetro
+.equ OP_INICIAR,            0               # Comando 20
+.equ OP_CANCELAR,           1               # Comando 21
+
+# Códigos ASCII
+.equ ASCII_ZERO,            0x30            # '0'
+
+# Offsets dos displays
+.equ HEX0_OFFSET,           0               # Unidades de segundos
+.equ HEX1_OFFSET,           4               # Dezenas de segundos  
+.equ HEX2_OFFSET,           8               # Unidades de minutos
+.equ HEX3_OFFSET,           12              # Dezenas de minutos
 
 #========================================================================================================================================
-# FUNÇÃO PRINCIPAL DE CONTROLE DO CRONÔMETRO - ABI COMPLIANT
-# Entrada: r4 = ponteiro para string de comando ("20" ou "21")
+# FUNÇÃO PRINCIPAL DO CRONÔMETRO - ABI COMPLIANT
+# Entrada: r4 = ponteiro para string de comando (formato: "20" ou "21")
 # Saída: nenhuma
-# Formato esperado:
-#   - "20" ou "20 " = iniciar cronômetro (reseta para 00:00)
-#   - "21" ou "21 " = cancelar cronômetro (para e limpa displays)
 #========================================================================================================================================
-cronometro:
-    # === PRÓLOGO ABI COMPLETO ===
-    subi        sp, sp, 32              # Aloca 32 bytes na stack (múltiplo de 4)
-    stw         ra, 28(sp)              # Salva return address
-    stw         fp, 24(sp)              # Salva frame pointer
-    stw         r16, 20(sp)             # Salva r16 (ponteiro comando)
-    stw         r17, 16(sp)             # Salva r17 (operação parseada)
-    stw         r18, 12(sp)             # Salva r18 (temporário)
-    stw         r19, 8(sp)              # Salva r19 (temporário)
-    stw         r20, 4(sp)              # Salva r20 (temporário)
-    stw         r21, 0(sp)              # Salva r21 (temporário)
+_cronometro:
+    # --- Stack Frame Prologue (ABI Standard) ---
+    # Salva registradores callee-saved que serão usados
+    subi        sp, sp, 20
+    stw         fp, 16(sp)              # Frame pointer (callee-saved)
+    stw         ra, 12(sp)              # Return address (callee-saved)
+    stw         r16, 8(sp)              # s0 - Command pointer (callee-saved)
+    stw         r17, 4(sp)              # s1 - Operation (callee-saved)
+    stw         r18, 0(sp)              # s2 - Spare (callee-saved)
     
-    # Estabelece frame pointer
-    mov         fp, sp                  # fp aponta para stack frame atual
+    # Configura frame pointer conforme ABI
+    mov         fp, sp
     
-    # === COPIA PARÂMETRO PARA REGISTRADOR CALLEE-SAVED ===
-    mov         r16, r4                 # r16 = ponteiro comando
+    # Copia argumento para registrador callee-saved
+    mov         r16, r4                 # r16 = comando string
     
-    # === PARSING DA OPERAÇÃO COM ESPAÇO OPCIONAL ===
-    # Suporta formatos "2x" e "2 x" (com espaço após '2')
-    ldb         r17, 1(r16)             # r17 = segundo caractere
-    movi        r18, ASCII_SPACE        # r18 = ASCII espaço
-    bne         r17, r18, PARSE_OP_OK   # Se não é espaço, continua
+    # Extrai operação do comando (segundo caractere)
+    call        EXTRAIR_OPERACAO_CRONOMETRO
+    mov         r17, r2                 # r17 = operação (0=iniciar, 1=cancelar)
     
-    # Se segundo caractere é espaço, pega o terceiro
-    ldb         r17, 2(r16)             # r17 = terceiro caractere
-    
-PARSE_OP_OK:
-    # Converte ASCII para valor numérico
-    subi        r17, r17, ASCII_ZERO    # r17 = operação (0 ou 1)
-    
-    # === DISPATCH DA OPERAÇÃO ===
-    beq         r17, r0, INICIAR_CRONOMETRO  # Se operação = 0, inicia
-    br          CANCELAR_CRONOMETRO          # Senão, cancela
-    
+    # Executa operação baseada no comando
+    beq         r17, r0, INICIAR_CRONOMETRO
+    br          CANCELAR_CRONOMETRO
+
+#========================================================================================================================================
+# OPERAÇÕES DO CRONÔMETRO
+#========================================================================================================================================
+
 INICIAR_CRONOMETRO:
-    # === VERIFICA SE CRONÔMETRO JÁ ESTÁ ATIVO ===
-    movia       r18, CRONOMETRO_ATIVO   # r18 = ponteiro flag ativo
-    ldw         r19, (r18)              # r19 = status atual
-    bne         r19, r0, CRONOMETRO_JA_ATIVO # Se já ativo, não faz nada
+    # Verifica se cronômetro já está ativo
+    movia       r1, CRONOMETRO_ATIVO
+    ldw         r2, (r1)
+    bne         r2, r0, CRONOMETRO_JA_ATIVO
     
-    # === DESATIVA ANIMAÇÃO SE ESTIVER ATIVA ===
-    # EXCLUSÃO MÚTUA: cronômetro e animação não podem usar timer simultaneamente
-    movia       r18, FLAG_INTERRUPCAO   # r18 = ponteiro flag animação
-    ldw         r19, (r18)              # r19 = status animação
-    beq         r19, r0, CONTINUAR_INICIO_CRONO # Se animação desativa, continua
+    # Inicializa estado do cronômetro
+    call        INICIALIZAR_ESTADO_CRONOMETRO
     
-    # Desativa animação e restaura LEDs
-    stw         r0, (r18)               # FLAG_INTERRUPCAO = 0
-    call        RESTAURAR_ESTADO_LEDS   # Restaura LEDs salvos pela animação
+    # Configura e inicia timer do cronômetro
+    call        CONFIGURAR_TIMER_CRONOMETRO
     
-CONTINUAR_INICIO_CRONO:
-    # === INICIALIZAÇÃO DO CRONÔMETRO ===
-    movia       r18, CRONOMETRO_ATIVO   # r18 = ponteiro flag ativo
-    movi        r19, 1                  # r19 = 1 (ativo)
-    stw         r19, (r18)              # CRONOMETRO_ATIVO = 1
+    # Configura interrupção do KEY1 para pause/resume
+    call        CONFIGURAR_KEY1_INTERRUPCAO
     
-    # Reseta contador de segundos
-    movia       r18, CRONOMETRO_SEGUNDOS # r18 = ponteiro contador
-    stw         r0, (r18)               # CRONOMETRO_SEGUNDOS = 0
+    # Ativa cronômetro
+    movia       r1, CRONOMETRO_ATIVO
+    movi        r2, 1
+    stw         r2, (r1)
     
-    # Despausa cronômetro (caso estivesse pausado)
-    movia       r18, CRONOMETRO_PAUSADO # r18 = ponteiro flag pausa
-    stw         r0, (r18)               # CRONOMETRO_PAUSADO = 0 (rodando)
+    # Atualiza display inicial
+    call        ATUALIZAR_DISPLAY_CRONOMETRO
     
-    # === CONFIGURAÇÃO E INÍCIO DO TIMER ===
-    movia       r4, CRONOMETRO_PERIODO  # r4 = período de 1 segundo (ABI)
-    call        CONFIGURAR_TIMER        # Configura timer para 1s
-    
-    # === ATUALIZAÇÃO INICIAL DOS DISPLAYS ===
-    call        ATUALIZAR_DISPLAY_CRONOMETRO # Mostra 00:00
-    
-    br          FIM_CRONOMETRO_ABI      # Finaliza comando
-    
-CRONOMETRO_JA_ATIVO:
-    # Se cronômetro já está ativo, comando é ignorado
-    br          FIM_CRONOMETRO_ABI
-    
+    br          FIM_CRONOMETRO
+
 CANCELAR_CRONOMETRO:
-    # === DESATIVA CRONÔMETRO ===
-    movia       r18, CRONOMETRO_ATIVO   # r18 = ponteiro flag ativo
-    stw         r0, (r18)               # CRONOMETRO_ATIVO = 0
+    # Para timer do cronômetro
+    call        PARAR_TIMER_CRONOMETRO
     
-    # === PARA TIMER DE FORMA SEGURA ===
-    call        PARAR_TIMER             # Para timer e desabilita interrupções
+    # Desativa cronômetro
+    movia       r1, CRONOMETRO_ATIVO
+    stw         r0, (r1)
     
-    # === LIMPA DISPLAYS 7-SEGMENTOS ===
-    call        LIMPAR_DISPLAYS_CRONOMETRO # Apaga HEX3-0
+    # Zera contador
+    movia       r1, CRONOMETRO_SEGUNDOS
+    stw         r0, (r1)
     
-    # === RESETA VARIÁVEIS ===
-    movia       r18, CRONOMETRO_SEGUNDOS # r18 = ponteiro contador
-    stw         r0, (r18)               # CRONOMETRO_SEGUNDOS = 0
+    # Limpa pausado
+    movia       r1, CRONOMETRO_PAUSADO
+    stw         r0, (r1)
     
-    movia       r18, CRONOMETRO_PAUSADO # r18 = ponteiro flag pausa
-    stw         r0, (r18)               # CRONOMETRO_PAUSADO = 0
+    # Limpa displays
+    call        LIMPAR_DISPLAYS
+
+CRONOMETRO_JA_ATIVO:
+    # Cronômetro já estava ativo, não faz nada
     
-FIM_CRONOMETRO_ABI:
-    # === EPÍLOGO ABI COMPLETO ===
-    ldw         r21, 0(sp)              # Restaura r21
-    ldw         r20, 4(sp)              # Restaura r20
-    ldw         r19, 8(sp)              # Restaura r19
-    ldw         r18, 12(sp)             # Restaura r18
-    ldw         r17, 16(sp)             # Restaura r17
-    ldw         r16, 20(sp)             # Restaura r16
-    ldw         fp, 24(sp)              # Restaura frame pointer
-    ldw         ra, 28(sp)              # Restaura return address
-    addi        sp, sp, 32              # Libera stack frame
-    ret                                 # Retorna ao chamador
+FIM_CRONOMETRO:
+    # --- Stack Frame Epilogue (ABI Standard) ---
+    # Restaura registradores na ordem inversa
+    ldw         r18, 0(fp)
+    ldw         r17, 4(fp)
+    ldw         r16, 8(fp)
+    ldw         ra, 12(fp)
+    ldw         fp, 16(fp)
+    addi        sp, sp, 20
+    ret
 
 #========================================================================================================================================
-# ATUALIZAÇÃO DOS DISPLAYS DO CRONÔMETRO - ABI COMPLIANT
-# Entrada: nenhuma (lê de CRONOMETRO_SEGUNDOS)
-# Saída: nenhuma (escreve nos displays HEX3-0)
-# Formato: MM:SS (minutos:segundos) nos 4 displays
-# Baseado nas especificações da Cornell (https://people.ece.cornell.edu/land/courses/ece5760/NiosII_asm/)
+# FUNÇÕES DE PARSING - ABI COMPLIANT
 #========================================================================================================================================
+
+#------------------------------------------------------------------------
+# Extrai operação do comando do cronômetro (segundo caractere)
+# Entrada: r16 = ponteiro para comando
+# Saída: r2 = operação (0=iniciar, 1=cancelar)
+#------------------------------------------------------------------------
+EXTRAIR_OPERACAO_CRONOMETRO:
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 8
+    stw         ra, 4(sp)
+    stw         r16, 0(sp)
+    
+    # Lê segundo caractere (posição 1)
+    addi        r16, r16, 1             # Aponta para posição 1
+    ldb         r1, (r16)               # Carrega caractere
+    
+    # Converte ASCII para número
+    subi        r2, r1, ASCII_ZERO      # r2 = operação
+    
+    # --- Stack Frame Epilogue ---
+    ldw         r16, 0(sp)
+    ldw         ra, 4(sp)
+    addi        sp, sp, 8
+    ret
+
+#========================================================================================================================================
+# FUNÇÕES DE ESTADO DO CRONÔMETRO - ABI COMPLIANT
+#========================================================================================================================================
+
+#------------------------------------------------------------------------
+# Inicializa estado do cronômetro
+#------------------------------------------------------------------------
+INICIALIZAR_ESTADO_CRONOMETRO:
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 8
+    stw         ra, 4(sp)
+    stw         r16, 0(sp)
+    
+    # Zera contador de segundos
+    movia       r16, CRONOMETRO_SEGUNDOS
+    stw         r0, (r16)
+    
+    # Zera flag de pausado
+    movia       r16, CRONOMETRO_PAUSADO
+    stw         r0, (r16)
+    
+    # Limpa flag de tick
+    movia       r16, CRONOMETRO_TICK_FLAG
+    stw         r0, (r16)
+    
+    # --- Stack Frame Epilogue ---
+    ldw         r16, 0(sp)
+    ldw         ra, 4(sp)
+    addi        sp, sp, 8
+    ret
+
+#========================================================================================================================================
+# FUNÇÕES DE TIMER - ABI COMPLIANT
+#========================================================================================================================================
+
+#------------------------------------------------------------------------
+# Configura e inicia timer para cronômetro
+#------------------------------------------------------------------------
+CONFIGURAR_TIMER_CRONOMETRO:
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 12
+    stw         ra, 8(sp)
+    stw         r16, 4(sp)
+    stw         r17, 0(sp)
+    
+    movia       r16, TIMER_BASE
+    
+    # Para timer primeiro (segurança)
+    stwio       r0, 4(r16)              # Control = 0
+    
+    # Configura período (1s = 50M ciclos a 50MHz)
+    movia       r17, CRONOMETRO_PERIODO
+    
+    # Bits baixos do período
+    andi        r1, r17, 0xFFFF
+    stwio       r1, 8(r16)              # periodl
+    
+    # Bits altos do período  
+    srli        r17, r17, 16
+    stwio       r17, 12(r16)            # periodh
+    
+    # Limpa flag de timeout pendente
+    movi        r1, 1
+    stwio       r1, 0(r16)              # status = 1 (limpa TO)
+    
+    # Habilita interrupções do timer
+    movi        r1, 1                   # IRQ0 para timer
+    wrctl       ienable, r1
+    wrctl       status, r1              # Habilita PIE
+    
+    # Inicia timer: START=1, CONT=1, ITO=1
+    movi        r1, 7                   # 0b111
+    stwio       r1, 4(r16)              # control
+    
+    # --- Stack Frame Epilogue ---
+    ldw         r17, 0(sp)
+    ldw         r16, 4(sp)
+    ldw         ra, 8(sp)
+    addi        sp, sp, 12
+    ret
+
+#------------------------------------------------------------------------
+# Para timer do cronômetro de forma robusta
+#------------------------------------------------------------------------
+PARAR_TIMER_CRONOMETRO:
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 8
+    stw         ra, 4(sp)
+    stw         r16, 0(sp)
+    
+    movia       r16, TIMER_BASE
+    
+    # Para timer primeiro
+    stwio       r0, 4(r16)              # control = 0
+    
+    # Limpa flag de timeout
+    movi        r1, 1
+    stwio       r1, 0(r16)              # status = 1
+    
+    # Desabilita interrupções do timer
+    wrctl       ienable, r0             # Desabilita todas IRQs
+    wrctl       status, r0              # Desabilita PIE
+    
+    # --- Stack Frame Epilogue ---
+    ldw         r16, 0(sp)
+    ldw         ra, 4(sp)
+    addi        sp, sp, 8
+    ret
+
+#========================================================================================================================================
+# FUNÇÕES DE DISPLAY - ABI COMPLIANT
+#========================================================================================================================================
+
+#------------------------------------------------------------------------
+# Atualiza displays 7-segmentos com tempo do cronômetro
+# Formato: MM:SS (HEX3 HEX2 : HEX1 HEX0)
+#------------------------------------------------------------------------
 ATUALIZAR_DISPLAY_CRONOMETRO:
-    # === PRÓLOGO ABI ===
-    subi        sp, sp, 28              # Aloca 28 bytes na stack
-    stw         ra, 24(sp)              # Salva return address
-    stw         r16, 20(sp)             # Salva r16 (segundos totais)
-    stw         r17, 16(sp)             # Salva r17 (minutos)
-    stw         r18, 12(sp)             # Salva r18 (segundos restantes)
-    stw         r19, 8(sp)              # Salva r19 (dígito atual)
-    stw         r20, 4(sp)              # Salva r20 (base HEX)
-    stw         r21, 0(sp)              # Salva r21 (temporário)
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 24
+    stw         ra, 20(sp)
+    stw         r16, 16(sp)             # Segundos totais
+    stw         r17, 12(sp)             # Minutos
+    stw         r18, 8(sp)              # Segundos restantes
+    stw         r19, 4(sp)              # HEX base
+    stw         r20, 0(sp)              # Dígito temporário
     
-    # === CARREGA SEGUNDOS TOTAIS ===
-    movia       r16, CRONOMETRO_SEGUNDOS # r16 = ponteiro
-    ldw         r16, (r16)              # r16 = segundos totais (0-5999)
+    # Carrega segundos totais
+    movia       r1, CRONOMETRO_SEGUNDOS
+    ldw         r16, (r1)
     
-    # === CONVERTE SEGUNDOS PARA MINUTOS:SEGUNDOS ===
-    movi        r21, 60                 # r21 = divisor para conversão
-    div         r17, r16, r21           # r17 = minutos (total / 60)
-    mul         r20, r17, r21           # r20 = minutos * 60
-    sub         r18, r16, r20           # r18 = segundos restantes (total % 60)
+    movia       r19, HEX_BASE
     
-    # Carrega base dos displays uma única vez
-    movia       r20, HEX_BASE           # r20 = base dos displays
+    # Calcula minutos e segundos
+    movi        r1, 60
+    div         r17, r16, r1             # r17 = minutos
+    mul         r2, r17, r1              # r2 = minutos * 60
+    sub         r18, r16, r2             # r18 = segundos restantes
     
-    # === DISPLAY HEX3 (DEZENAS DE MINUTOS) ===
-    movi        r21, 10                 # r21 = divisor para dezenas
-    div         r19, r17, r21           # r19 = dezena dos minutos
-    mov         r4, r19                 # r4 = dígito (ABI: primeiro parâmetro)
-    call        CODIFICAR_7SEG          # r2 = código 7-segmentos
-    stwio       r2, 12(r20)             # HEX3 = dezena minutos
+    # HEX3 (dezenas de minutos)
+    movi        r1, 10
+    div         r20, r17, r1             # r20 = dezenas de minutos
+    mov         r4, r20
+    call        CODIFICAR_7SEG
+    stwio       r2, HEX3_OFFSET(r19)     # HEX3
     
-    # === DISPLAY HEX2 (UNIDADES DE MINUTOS) ===
-    div         r21, r17, r19           # r21 = dezena (reutiliza r19)
-    muli        r21, r21, 10            # r21 = dezena * 10
-    sub         r19, r17, r21           # r19 = unidade dos minutos
-    mov         r4, r19                 # r4 = dígito (ABI)
-    call        CODIFICAR_7SEG          # r2 = código 7-segmentos
-    stwio       r2, 8(r20)              # HEX2 = unidade minutos
+    # HEX2 (unidades de minutos)
+    movi        r1, 10
+    div         r2, r17, r1              # r2 = dezenas
+    mul         r2, r2, r1               # r2 = dezenas * 10
+    sub         r20, r17, r2             # r20 = unidades de minutos
+    mov         r4, r20
+    call        CODIFICAR_7SEG
+    stwio       r2, HEX2_OFFSET(r19)     # HEX2
     
-    # === DISPLAY HEX1 (DEZENAS DE SEGUNDOS) ===
-    movi        r21, 10                 # r21 = divisor
-    div         r19, r18, r21           # r19 = dezena dos segundos
-    mov         r4, r19                 # r4 = dígito (ABI)
-    call        CODIFICAR_7SEG          # r2 = código 7-segmentos
-    stwio       r2, 4(r20)              # HEX1 = dezena segundos
+    # HEX1 (dezenas de segundos)
+    movi        r1, 10
+    div         r20, r18, r1             # r20 = dezenas de segundos
+    mov         r4, r20
+    call        CODIFICAR_7SEG
+    stwio       r2, HEX1_OFFSET(r19)     # HEX1
     
-    # === DISPLAY HEX0 (UNIDADES DE SEGUNDOS) ===
-    div         r21, r18, r19           # r21 = dezena (reutiliza r19)
-    muli        r21, r21, 10            # r21 = dezena * 10
-    sub         r19, r18, r21           # r19 = unidade dos segundos
-    mov         r4, r19                 # r4 = dígito (ABI)
-    call        CODIFICAR_7SEG          # r2 = código 7-segmentos
-    stwio       r2, 0(r20)              # HEX0 = unidade segundos
+    # HEX0 (unidades de segundos)
+    movi        r1, 10
+    div         r2, r18, r1              # r2 = dezenas
+    mul         r2, r2, r1               # r2 = dezenas * 10  
+    sub         r20, r18, r2             # r20 = unidades de segundos
+    mov         r4, r20
+    call        CODIFICAR_7SEG
+    stwio       r2, HEX0_OFFSET(r19)     # HEX0
     
-    # === EPÍLOGO ABI ===
-    ldw         r21, 0(sp)              # Restaura r21
-    ldw         r20, 4(sp)              # Restaura r20
-    ldw         r19, 8(sp)              # Restaura r19
-    ldw         r18, 12(sp)             # Restaura r18
-    ldw         r17, 16(sp)             # Restaura r17
-    ldw         r16, 20(sp)             # Restaura r16
-    ldw         ra, 24(sp)              # Restaura return address
-    addi        sp, sp, 28              # Libera stack frame
-    ret                                 # Retorna ao chamador
+    # --- Stack Frame Epilogue ---
+    ldw         r20, 0(sp)
+    ldw         r19, 4(sp)
+    ldw         r18, 8(sp)
+    ldw         r17, 12(sp)
+    ldw         r16, 16(sp)
+    ldw         ra, 20(sp)
+    addi        sp, sp, 24
+    ret
 
-#========================================================================================================================================
-# CODIFICAÇÃO PARA DISPLAY 7-SEGMENTOS - ABI COMPLIANT
+#------------------------------------------------------------------------
+# Limpa todos os displays 7-segmentos
+#------------------------------------------------------------------------
+LIMPAR_DISPLAYS:
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 8
+    stw         ra, 4(sp)
+    stw         r16, 0(sp)
+    
+    movia       r16, HEX_BASE
+    
+    # Limpa todos os displays
+    stwio       r0, HEX0_OFFSET(r16)     # HEX0
+    stwio       r0, HEX1_OFFSET(r16)     # HEX1
+    stwio       r0, HEX2_OFFSET(r16)     # HEX2
+    stwio       r0, HEX3_OFFSET(r16)     # HEX3
+    
+    # --- Stack Frame Epilogue ---
+    ldw         r16, 0(sp)
+    ldw         ra, 4(sp)
+    addi        sp, sp, 8
+    ret
+
+#------------------------------------------------------------------------
+# Codifica dígito para display 7-segmentos
 # Entrada: r4 = dígito (0-9)
-# Saída: r2 = código de 7 segmentos correspondente
-# Implementação: usa tabela lookup otimizada
-#========================================================================================================================================
+# Saída: r2 = código 7-segmentos
+#------------------------------------------------------------------------
 CODIFICAR_7SEG:
-    # === PRÓLOGO ABI MÍNIMO ===
-    subi        sp, sp, 12              # Aloca 12 bytes na stack
-    stw         ra, 8(sp)               # Salva return address
-    stw         r16, 4(sp)              # Salva r16
-    stw         r17, 0(sp)              # Salva r17
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 8
+    stw         ra, 4(sp)
+    stw         r16, 0(sp)
     
-    # === VALIDAÇÃO DE ENTRADA ===
-    movi        r16, 9                  # r16 = máximo válido
-    bgt         r4, r16, DIGITO_INVALIDO # Se > 9, inválido
-    blt         r4, r0, DIGITO_INVALIDO # Se < 0, inválido
+    # Validação de entrada
+    movi        r1, 9
+    bgt         r4, r1, DIGITO_INVALIDO_7SEG
+    blt         r4, r0, DIGITO_INVALIDO_7SEG
     
-    # === ACESSO À TABELA DE CODIFICAÇÃO ===
-    movia       r16, TABELA_7SEG        # r16 = base da tabela
-    slli        r17, r4, 2              # r17 = dígito * 4 (tamanho word)
-    add         r16, r16, r17           # r16 = &tabela[dígito]
-    ldw         r2, (r16)               # r2 = código do dígito
-    br          FIM_CODIFICACAO_CRONO
+    # Carrega código da tabela (usa a tabela global do main.s)
+    movia       r16, TABELA_7SEG
+    slli        r1, r4, 2                # Multiplica por 4 (word)
+    add         r16, r16, r1
+    ldw         r2, (r16)                # Carrega código
+    br          CODIF_7SEG_EXIT
     
-DIGITO_INVALIDO:
-    # === RETORNA DISPLAY APAGADO PARA ENTRADA INVÁLIDA ===
-    movi        r2, 0x00                # r2 = todos segmentos apagados
+DIGITO_INVALIDO_7SEG:
+    movi        r2, 0x00                 # Display apagado
     
-FIM_CODIFICACAO_CRONO:
-    # === EPÍLOGO ABI ===
-    ldw         r17, 0(sp)              # Restaura r17
-    ldw         r16, 4(sp)              # Restaura r16
-    ldw         ra, 8(sp)               # Restaura return address
-    addi        sp, sp, 12              # Libera stack frame
-    ret                                 # Retorna ao chamador
+CODIF_7SEG_EXIT:
+    # --- Stack Frame Epilogue ---
+    ldw         r16, 0(sp)
+    ldw         ra, 4(sp)
+    addi        sp, sp, 8
+    ret
 
 #========================================================================================================================================
-# LIMPEZA DOS DISPLAYS DO CRONÔMETRO - ABI COMPLIANT
-# Entrada: nenhuma
-# Saída: nenhuma (apaga todos os displays HEX3-0)
+# CONFIGURAÇÃO DE INTERRUPÇÕES - ABI COMPLIANT
 #========================================================================================================================================
-LIMPAR_DISPLAYS_CRONOMETRO:
-    # === PRÓLOGO ABI MÍNIMO ===
-    subi        sp, sp, 8               # Aloca 8 bytes na stack
-    stw         ra, 4(sp)               # Salva return address
-    stw         r16, 0(sp)              # Salva r16
+
+#------------------------------------------------------------------------
+# Configura interrupção do KEY1 para pause/resume
+# TODO: Esta função seria implementada se houvesse suporte completo a múltiplas IRQs
+#------------------------------------------------------------------------
+CONFIGURAR_KEY1_INTERRUPCAO:
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 4
+    stw         ra, 0(sp)
     
-    # === APAGA TODOS OS DISPLAYS ===
-    movia       r16, HEX_BASE           # r16 = base dos displays
-    stwio       r0, 0(r16)              # HEX0 = apagado
-    stwio       r0, 4(r16)              # HEX1 = apagado
-    stwio       r0, 8(r16)              # HEX2 = apagado
-    stwio       r0, 12(r16)             # HEX3 = apagado
+    # NOTA: Implementação simplificada
+    # Em um sistema completo, configuraria IRQ1 para KEY1
+    # Por enquanto, o controle de pause/resume seria feito via polling
     
-    # === EPÍLOGO ABI ===
-    ldw         r16, 0(sp)              # Restaura r16
-    ldw         ra, 4(sp)               # Restaura return address
-    addi        sp, sp, 8               # Libera stack frame
-    ret                                 # Retorna ao chamador
+    # --- Stack Frame Epilogue ---
+    ldw         ra, 0(sp)
+    addi        sp, sp, 4
+    ret
 
-#========================================================================================================================================
-# SEÇÃO DE DADOS - TABELA DE CODIFICAÇÃO 7-SEGMENTOS
-#========================================================================================================================================
-.section .data
-.align 4                                # CRÍTICO: Alinhamento em 4 bytes
-
-# === TABELA DE CODIFICAÇÃO 7-SEGMENTOS ===
-# Códigos para dígitos 0-9 em display de cátodo comum
-# Formato: gfedcba (bit 7-0, sendo 'a' o segmento inferior)
-.global TABELA_7SEG
-TABELA_7SEG:
-    .word 0x3F                          # Dígito 0: segments a,b,c,d,e,f
-    .word 0x06                          # Dígito 1: segments b,c
-    .word 0x5B                          # Dígito 2: segments a,b,d,e,g
-    .word 0x4F                          # Dígito 3: segments a,b,c,d,g
-    .word 0x66                          # Dígito 4: segments b,c,f,g
-    .word 0x6D                          # Dígito 5: segments a,c,d,f,g
-    .word 0x7D                          # Dígito 6: segments a,c,d,e,f,g
-    .word 0x07                          # Dígito 7: segments a,b,c
-    .word 0x7F                          # Dígito 8: segments a,b,c,d,e,f,g
-    .word 0x6F                          # Dígito 9: segments a,b,c,d,f,g
-
-#========================================================================================================================================
-# FIM DO ARQUIVO - CRONÔMETRO ABI COMPLIANT
-#========================================================================================================================================
-.end 
+# Referência para tabela 7-segmentos definida em main.s
+.extern TABELA_7SEG
