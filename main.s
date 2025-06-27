@@ -9,6 +9,7 @@
 
 # Referências para variáveis definidas em interrupcoes.s (compilado primeiro)
 .extern FLAG_INTERRUPCAO
+.extern TIMER_TICK_FLAG
 
 # Vetor de exceções movido para interrupcoes.s para melhor organização
 .section .text
@@ -62,6 +63,9 @@ _start:
 # Loop Principal: Imprimir Prompt, Ler e Processar Comando
 #========================================================================================================================================
 MAIN_LOOP:
+    # --- NOVO: Polling do Timer Tick para Animação ---
+    call        CHECK_ANIMATION_TICK
+
     # Limpa o buffer antes de cada iteração para garantir entrada limpa
     call        LIMPAR_BUFFER
     
@@ -174,7 +178,7 @@ FINISH_READ:
     beq         r11, r10, CALL_LED
 
     movi        r10, '1'        # '1' na tabela ASCII
-    beq         r11, r10, CALL_ANIMATION
+    beq         r10, r11, CALL_ANIMATION
 
     movi        r10, '2'        # '2' na tabela ASCII
     beq         r11, r10, CALL_CRONOMETER
@@ -201,6 +205,30 @@ CALL_CRONOMETER:
     call        _cronometro
     call        LIMPAR_BUFFER
     br          MAIN_LOOP
+
+#========================================================================================================================================
+# NOVA ROTINA: Verifica e processa o tick da animação
+#========================================================================================================================================
+CHECK_ANIMATION_TICK:
+    # Verifica se a animação está ligada
+    movia       r8, FLAG_INTERRUPCAO
+    ldw         r9, (r8)
+    beq         r9, r0, NO_ANIMATION_TICK # Se FLAG_INTERRUPCAO é 0, não faz nada
+
+    # Animação está ligada, verifica se o timer deu um tick
+    movia       r8, TIMER_TICK_FLAG
+    ldw         r9, (r8)
+    beq         r9, r0, NO_ANIMATION_TICK # Se TIMER_TICK_FLAG é 0, não faz nada
+
+    # Tick do timer ocorreu!
+    # 1. Limpa a flag para o próximo tick
+    stw         r0, (r8)
+
+    # 2. Executa um passo da animação
+    call        _update_animation_step
+
+NO_ANIMATION_TICK:
+    ret
 
 #========================================================================================================================================
 # Rotina para Limpar o Buffer
@@ -275,5 +303,6 @@ MSG_PROMPT:
 
 # Declaração do handler de interrupção para que o linker possa encontrá-lo.
 .global INTERRUPCAO_HANDLER
+.extern _update_animation_step
 
 .end

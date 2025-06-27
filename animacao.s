@@ -1,4 +1,5 @@
 .global _animacao
+.global _update_animation_step
 
 # Referências para símbolos globais
 .extern FLAG_INTERRUPCAO      # Definido em interrupcoes.s
@@ -97,6 +98,58 @@ FIM_ANIMACAO:
     ldw         fp, 16(fp)      # Restaura o frame pointer antigo
     # Desaloca o espaço da pilha
     addi        sp, sp, 20
+    ret
+
+# =======================================================================
+# _update_animation_step
+# Função chamada pelo main loop a cada 'tick' do timer.
+# Executa um passo da animação.
+# =======================================================================
+_update_animation_step:
+    # --- Stack Frame Prologue ---
+    subi    sp, sp, 20
+    stw     fp, 16(sp)
+    stw     ra, 12(sp)
+    stw     r10, 8(sp)
+    stw     r9, 4(sp)
+    stw     r8, 0(sp)
+    mov     fp, sp
+
+    # ANIMAÇÃO COM DIREÇÃO SW0
+    movia   r8, ANIMATION_STATE
+    ldw     r9, (r8)                 # Carrega o estado atual
+    
+    # Lê a direção do switch SW0
+    movia   r10, SW_BASE
+    ldwio   r10, (r10)
+    andi    r10, r10, 1
+    
+    beq     r10, r0, MOVE_LEFT_RIGHT
+    
+MOVE_RIGHT_LEFT:
+    srli    r9, r9, 1
+    bne     r9, r0, UPDATE_LEDS
+    movia   r9, 0x20000
+    br      UPDATE_LEDS
+    
+MOVE_LEFT_RIGHT:
+    slli    r9, r9, 1
+    movia   r10, 0x40000
+    bne     r9, r10, UPDATE_LEDS
+    movi    r9, 1
+    
+UPDATE_LEDS:
+    stw     r9, (r8)
+    movia   r10, LED_BASE
+    stwio   r9, (r10)
+
+    # --- Stack Frame Epilogue ---
+    ldw     r8, 0(fp)
+    ldw     r9, 4(fp)
+    ldw     r10, 8(fp)
+    ldw     ra, 12(fp)
+    ldw     fp, 16(fp)
+    addi    sp, sp, 20
     ret
 
 #========================================================================================================================================

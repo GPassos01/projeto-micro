@@ -7,6 +7,14 @@
 .equ LED_BASE, 0x10000000
 
 _led:
+    # --- Stack Frame Prologue (ABI Compliant) ---
+    # Aloca espaço na pilha para salvar os registradores 'ra' e 's0' (r16)
+    subi        sp, sp, 8
+    stw         ra, 4(sp)       # Salva o endereço de retorno
+    stw         r16, 0(sp)      # Salva r16 (s0), um registrador callee-saved
+
+    # A partir daqui, r16 pode ser usado livremente.
+    
     addi        r9,     r9,  1 #0p 00
     
     ldb         r10,    (r9) #guarda opção -> acende: 0x30 | apaga: 0x31
@@ -62,4 +70,9 @@ ATUALIZAR_LED:
     stw		    r16,    (r13)       # salva na memória estado atual
 
 FIM_LED:
+    # --- Stack Frame Epilogue ---
+    # Restaura os registradores salvos e desaloca a pilha
+    ldw         r16, 0(sp)      # Restaura o valor original de r16 (s0)
+    ldw         ra, 4(sp)       # Restaura o endereço de retorno
+    addi        sp, sp, 8
     ret
