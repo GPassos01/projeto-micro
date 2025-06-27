@@ -301,33 +301,44 @@ CMD_EXIT:
 # ROTINAS DE SUPORTE PARA TICKS
 #========================================================================================================================================
 PROCESSAR_TICK_CRONOMETRO:
+    # --- Stack Frame Prologue (CRÍTICO!) ---
+    subi        sp, sp, 12
+    stw         ra, 8(sp)                # Salva return address
+    stw         r16, 4(sp)               # Registrador temporário
+    stw         r17, 0(sp)               # Registrador temporário
+    
     # Verifica se cronômetro está ativo
-    movia       r1, CRONOMETRO_ATIVO
-    ldw         r2, (r1)
-    beq         r2, r0, TICK_CRONO_EXIT
+    movia       r16, CRONOMETRO_ATIVO
+    ldw         r17, (r16)
+    beq         r17, r0, TICK_CRONO_EXIT
     
     # Verifica se está pausado
-    movia       r1, CRONOMETRO_PAUSADO
-    ldw         r2, (r1)
-    bne         r2, r0, TICK_CRONO_EXIT
+    movia       r16, CRONOMETRO_PAUSADO
+    ldw         r17, (r16)
+    bne         r17, r0, TICK_CRONO_EXIT
     
     # Incrementa segundos
-    movia       r1, CRONOMETRO_SEGUNDOS
-    ldw         r2, (r1)
-    addi        r2, r2, 1
+    movia       r16, CRONOMETRO_SEGUNDOS
+    ldw         r17, (r16)
+    addi        r17, r17, 1
     
     # Verifica overflow (99:59 = 5999 segundos)
-    movi        r3, 5999
-    ble         r2, r3, STORE_SECONDS
-    mov         r2, r0                   # Reset para 00:00
+    movi        r1, 5999
+    ble         r17, r1, STORE_SECONDS
+    mov         r17, r0                   # Reset para 00:00
     
 STORE_SECONDS:
-    stw         r2, (r1)
+    stw         r17, (r16)
     
     # Atualiza displays
     call        ATUALIZAR_DISPLAY_CRONOMETRO
     
 TICK_CRONO_EXIT:
+    # --- Stack Frame Epilogue (CRÍTICO!) ---
+    ldw         r17, 0(sp)               # Restaura registradores
+    ldw         r16, 4(sp)
+    ldw         ra, 8(sp)                # Restaura return address
+    addi        sp, sp, 12               # Libera stack
     ret
 
 #========================================================================================================================================

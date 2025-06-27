@@ -59,7 +59,7 @@ _animacao:
     # Compara sub-comando com '0' (ASCII 0x30)
     movi        r18, '0'
     beq         r17, r18, INICIAR_ANIMACAO
-    
+
     # Se não for '0', assume comando para parar
     br          PARAR_ANIMACAO
 
@@ -108,7 +108,7 @@ PARAR_ANIMACAO:
 
 ANIM_JA_ATIVA:
     # Animação já estava ativa, não faz nada
-    
+
 FIM_ANIMACAO:
     # --- Stack Frame Epilogue (ABI Standard) ---
     # Restaura registradores na ordem inversa
