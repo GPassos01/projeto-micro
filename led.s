@@ -76,16 +76,16 @@ _led:
     movia       r10, LED_STATE
     ldw         r8, (r10)               # r8 = estado atual dos LEDs
 
-    # === PARSING DO NÚMERO DO LED (Posições 2-3) ===
-    # Extrai dezena (posição 2)
-    ldb         r9, 2(r4)               # Carrega caractere da dezena
+    # === PARSING DO NÚMERO DO LED (Posições 3-4) ===
+    # Extrai dezena (posição 3)
+    ldb         r9, 3(r4)               # Carrega caractere da dezena
     subi        r9, r9, ASCII_ZERO      # Converte ASCII para número
     slli        r10, r9, 3              # r10 = dezena * 8 
     slli        r9, r9, 1               # r9 = dezena * 2
     add         r9, r9, r10             # r9 = dezena * 10 (multiplicação otimizada)
     
-    # Adiciona unidade (posição 3)
-    ldb         r10, 3(r4)              # Carrega caractere da unidade
+    # Adiciona unidade (posição 4)
+    ldb         r10, 4(r4)              # Carrega caractere da unidade
     subi        r10, r10, ASCII_ZERO    # Converte ASCII para número
     add         r9, r9, r10             # r9 = número final do LED
 
