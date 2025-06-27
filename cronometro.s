@@ -379,8 +379,8 @@ CODIFICAR_7SEG:
     bgt         r4, r1, DIGITO_INVALIDO_7SEG
     blt         r4, r0, DIGITO_INVALIDO_7SEG
     
-    # Carrega código da tabela
-    movia       r16, TABELA_7SEG_CRONO
+    # Carrega código da tabela (usa a tabela global do main.s)
+    movia       r16, TABELA_7SEG
     slli        r1, r4, 2                # Multiplica por 4 (word)
     add         r16, r16, r1
     ldw         r2, (r16)                # Carrega código
@@ -418,21 +418,5 @@ CONFIGURAR_KEY1_INTERRUPCAO:
     addi        sp, sp, 4
     ret
 
-#========================================================================================================================================
-# SEÇÃO DE DADOS - ABI ALIGNED
-#========================================================================================================================================
-.section .data
-.align 4
-
-# Tabela de codificação para displays 7-segmentos (cronômetro)
-TABELA_7SEG_CRONO:
-    .word 0x3F    # 0
-    .word 0x06    # 1
-    .word 0x5B    # 2
-    .word 0x4F    # 3
-    .word 0x66    # 4
-    .word 0x6D    # 5
-    .word 0x7D    # 6
-    .word 0x07    # 7
-    .word 0x7F    # 8
-    .word 0x6F    # 9
+# Referência para tabela 7-segmentos definida em main.s
+.extern TABELA_7SEG
