@@ -60,26 +60,13 @@ _start:
 # Loop Principal: Imprimir Prompt, Ler e Processar Comando
 #========================================================================================================================================
 MAIN_LOOP:
-    # --- Verifica e processa ticks de interrupção ---
+    # --- 1. PROCESSA TICKS DE INTERRUPÇÃO (NÃO-BLOQUEANTE) ---
     call        PROCESSAR_TICKS_SISTEMA
     
-    # --- Limpa buffer para garantir entrada limpa ---
-    call        LIMPAR_BUFFER
+    # --- 2. PROCESSA ENTRADA DA UART (NÃO-BLOQUEANTE) ---
+    call        PROCESSAR_CHAR_UART
     
-    # --- Imprime prompt usando registradores ABI compliant ---
-    movia       r4, MSG_PROMPT           # r4 = argumento 1 (ABI)
-    call        IMPRIMIR_STRING
-    
-    # --- Lê comando do usuário ---
-    movia       r4, BUFFER_ENTRADA       # r4 = buffer destino (ABI)
-    movi        r5, 100                  # r5 = tamanho máximo (ABI)
-    call        LER_COMANDO_UART
-    
-    # --- Processa comando recebido ---
-    movia       r4, BUFFER_ENTRADA       # r4 = comando para processar (ABI)
-    call        PROCESSAR_COMANDO
-    
-    # Retorna ao início do loop
+    # Volta imediatamente para o início do loop para continuar o polling
     br          MAIN_LOOP
 
 #========================================================================================================================================
@@ -200,66 +187,65 @@ PRINT_EXIT:
     ret
 
 #========================================================================================================================================
-# LEITURA DE COMANDO VIA UART - ABI COMPLIANT
+# NOVA ROTINA DE PROCESSAMENTO DE CHAR (NÃO-BLOQUEANTE)
 #========================================================================================================================================
-LER_COMANDO_UART:
-    # --- Stack Frame Prologue ---
-    # r4 = buffer destino, r5 = tamanho máximo
-    subi        sp, sp, 20
-    stw         ra, 16(sp)
-    stw         r16, 12(sp)              # Buffer atual
-    stw         r17, 8(sp)               # UART base
-    stw         r18, 4(sp)               # Contador
-    stw         r19, 0(sp)               # Char lido
+PROCESSAR_CHAR_UART:
+    # --- Stack Frame ---
+    subi        sp, sp, 12
+    stw         ra, 8(sp)
+    stw         r8, 4(sp)
+    stw         r9, 0(sp)
     
-    mov         r16, r4                  # Buffer destino
-    mov         r18, r5                  # Tamanho máximo
-    movia       r17, JTAG_UART_BASE
+    movia       r8, JTAG_UART_BASE
+    ldwio       r9, UART_DATA(r8)       # Lê registrador de dados da UART
     
-READ_CHAR_LOOP:
-    # Limite de tentativas para robustez
-    movi        r1, 10000
-    
-UART_POLL_LOOP:
-    # Leitura atômica da UART
-    rdctl       r2, status
-    wrctl       status, r0
-    ldwio       r3, UART_DATA(r17)
-    wrctl       status, r2
-    
-    andi        r19, r3, 0x8000          # Verifica RVALID
-    bne         r19, r0, CHAR_READY
-    
-    subi        r1, r1, 1
-    bne         r1, r0, UART_POLL_LOOP
-    br          READ_CHAR_LOOP           # Timeout, tenta novamente
-    
-CHAR_READY:
-    andi        r19, r3, 0xFF            # Isola caractere
-    
-    # Verifica se é Enter ou CR
-    movi        r1, 10                   # '\n'
-    beq         r19, r1, READ_COMPLETE
-    movi        r1, 13                   # '\r'  
-    beq         r19, r1, READ_COMPLETE
-    
+    # Verifica se há um caractere válido (bit 15 RVALID)
+    andi        r8, r9, 0x8000
+    beq         r8, r0, FIM_PROCESSA_CHAR # Se não há caractere, retorna imediatamente
+
+    # Isola o caractere (8 bits inferiores)
+    andi        r9, r9, 0xFF
+
+    # Verifica se é Enter ou CR para finalizar o comando
+    movi        r8, 10                  # '\n'
+    beq         r9, r8, COMANDO_RECEBIDO
+    movi        r8, 13                  # '\r'
+    beq         r9, r8, COMANDO_RECEBIDO
+
     # Armazena caractere no buffer
-    stb         r19, (r16)
-    addi        r16, r16, 1
-    subi        r18, r18, 1
-    bne         r18, r0, READ_CHAR_LOOP  # Continua se há espaço
+    movia       r8, BUFFER_ENTRADA_POS
+    ldw         r10, (r8)               # Carrega ponteiro da posição atual
+    movia       r11, BUFFER_ENTRADA
+    add         r10, r10, r11           # Calcula endereço de armazenamento
+    stb         r9, (r10)               # Salva o caractere
+
+    # Incrementa a posição no buffer
+    movia       r8, BUFFER_ENTRADA_POS
+    ldw         r10, (r8)
+    addi        r10, r10, 1
+    stw         r10, (r8)
+    br          FIM_PROCESSA_CHAR
+
+COMANDO_RECEBIDO:
+    # Comando finalizado, processa
+    movia       r4, BUFFER_ENTRADA
+    call        PROCESSAR_COMANDO
     
-READ_COMPLETE:
-    # Adiciona null terminator
-    stb         r0, (r16)
+    # Limpa buffer e reseta posição para o próximo comando
+    call        LIMPAR_BUFFER
+    movia       r8, BUFFER_ENTRADA_POS
+    stw         r0, (r8)
     
-    # --- Stack Frame Epilogue ---
-    ldw         r19, 0(sp)
-    ldw         r18, 4(sp)
-    ldw         r17, 8(sp)
-    ldw         r16, 12(sp)
-    ldw         ra, 16(sp)
-    addi        sp, sp, 20
+    # Re-imprime o prompt para o próximo comando
+    movia       r4, MSG_PROMPT
+    call        IMPRIMIR_STRING
+
+FIM_PROCESSA_CHAR:
+    # --- Epílogo ---
+    ldw         r9, 0(sp)
+    ldw         r8, 4(sp)
+    ldw         ra, 8(sp)
+    addi        sp, sp, 12
     ret
 
 #========================================================================================================================================
@@ -465,10 +451,15 @@ LIMPAR_LOOP:
 LED_STATE:
     .word 0
 
-# Buffer para armazenar a entrada do usuário.
+# Buffer para entrada do usuário
 .global BUFFER_ENTRADA  
 BUFFER_ENTRADA:
     .skip 100
+
+# Ponteiro para a posição atual no buffer de entrada
+.global BUFFER_ENTRADA_POS
+BUFFER_ENTRADA_POS:
+    .word 0
 
 # Tabela de codificação para displays 7-segmentos
 .global TABELA_7SEG
