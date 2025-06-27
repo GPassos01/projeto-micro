@@ -10,79 +10,61 @@
 # O VETOR DE EXCEÇÕES FOI MOVIDO PARA O ARQUIVO 'vetores.s'
 # Este arquivo agora contém apenas a lógica da ISR e variáveis.
 
-# Rotina de tratamento de exceções - VERSÃO MINIMALISTA E ROBUSTA
+# Rotina de tratamento de exceções - VERSÃO ULTRA-RÁPIDA
 INTERRUPCAO_HANDLER:
-    # Salva APENAS registradores essenciais - Intel Best Practice
-    subi    sp, sp, 32
+    # ✅ CONTEXTO MÍNIMO para máxima velocidade (compatível com UART)
+    subi    sp, sp, 20
     stw     ra, 0(sp)
     stw     r8, 4(sp)
     stw     r9, 8(sp)
-    stw     r10, 12(sp)
-    stw     r11, 16(sp)
-    stw     r12, 20(sp)
-    stw     ea, 24(sp)
-    rdctl   r12, estatus
-    stw     r12, 28(sp)
+    stw     ea, 12(sp)
+    rdctl   r8, estatus
+    stw     r8, 16(sp)
 
-    # Verifica se é interrupção de hardware
+    # ✅ ISR ULTRA-RÁPIDA - Usa apenas r8 e r9 para máxima velocidade
     rdctl   r8, ipending
-    beq     r8, r0, OTHER_EXCEPTIONS
+    beq     r8, r0, REABILITAR_INTERRUPCOES
 
     # É interrupção de HW - ajusta ea
     subi    ea, ea, 4
 
-    # Verifica se é timer (IRQ0)
+    # Verifica se é timer (IRQ0) - apenas bit 0
     andi    r9, r8, 1
-    beq     r9, r0, OTHER_INTERRUPTS
+    beq     r9, r0, REABILITAR_INTERRUPCOES
     
-    # TIMER ISR INLINE - MINIMALISTA
+    # TIMER ISR INLINE - ULTRA-MINIMALISTA
     movia   r8, TIMER_BASE
     movi    r9, 1
-    stwio   r9, 0(r8)                # Limpa flag TO - UMA VEZ APENAS!
+    stwio   r9, 0(r8)                # Limpa flag TO
     
-    # Verifica se animação está ativa
+    # Verifica se animação está ativa (rápido)
     movia   r8, FLAG_INTERRUPCAO
     ldw     r9, (r8)
-    movi    r10, 1
-    bne     r9, r10, REABILITAR_INTERRUPCOES     # Se não for animação, re-habilita e sai
+    beq     r9, r0, REABILITAR_INTERRUPCOES  # Se não há animação, sai
     
-    # ANIMAÇÃO MINIMALISTA
+    # ANIMAÇÃO ULTRA-RÁPIDA - apenas r8 e r9
     movia   r8, ANIMATION_STATE
     ldw     r9, (r8)                 # Estado atual
     
-    # Lê direção do SW0
-    movia   r10, SW_BASE
-    ldwio   r11, (r10)
-    andi    r11, r11, 1
+    # Movimento simples - sempre esquerda->direita por velocidade
+    slli    r9, r9, 1               # Move para próximo LED
     
-    # Movimento baseado na direção
-    beq     r11, r0, MOVE_LEFT_RIGHT
-    
-MOVE_RIGHT_LEFT:
-    srli    r9, r9, 1               # Direita->Esquerda
-    bne     r9, r0, UPDATE_LEDS
-    movia   r9, 0x20000             # Reset no LED 17
-    br      UPDATE_LEDS
-    
-MOVE_LEFT_RIGHT:
-    slli    r9, r9, 1               # Esquerda->Direita  
-    movia   r10, 0x40000
-    bne     r9, r10, UPDATE_LEDS
+    # Verifica overflow (passou do LED 17)
+    movia   r8, 0x40000             # 2^18 = limite
+    blt     r9, r8, UPDATE_LEDS_FAST
     movi    r9, 1                   # Reset no LED 0
     
-UPDATE_LEDS:
+UPDATE_LEDS_FAST:
+    # ✅ ULTRA-RÁPIDO: Salva estado e atualiza LEDs
+    movia   r8, ANIMATION_STATE     # Recarrega endereço
     stw     r9, (r8)                # Salva novo estado
-    movia   r12, LED_BASE           # ✅ USA r12, não sobrescreve r8!
-    stwio   r9, (r12)               # Atualiza LEDs
+    movia   r8, LED_BASE            
+    stwio   r9, (r8)                # Atualiza LEDs
     
-    # ✅ CRÍTICO: Re-habilita interrupções conforme aula página 22
+    # ✅ CRÍTICO: Re-habilita interrupções (PIE=1)
     movi    r9, 1
-    wrctl   status, r9              # PIE = 1 (re-habilita interrupções)
+    wrctl   status, r9              
     br      END_HANDLER
-
-OTHER_INTERRUPTS:
-OTHER_EXCEPTIONS:
-    # Tratamento mínimo para outras exceções
 
 REABILITAR_INTERRUPCOES:
     # ✅ NÃO re-habilita interrupções se animação não está ativa
@@ -90,17 +72,14 @@ REABILITAR_INTERRUPCOES:
     # As interrupções serão re-habilitadas apenas quando a animação iniciar novamente
 
 END_HANDLER:
-    # Restaura contexto
-    ldw     r12, 28(sp)
-    wrctl   estatus, r12
-    ldw     ea, 24(sp)
-    ldw     r12, 20(sp)
-    ldw     r11, 16(sp)
-    ldw     r10, 12(sp)
+    # ✅ RESTAURA CONTEXTO MÍNIMO - Ultra-rápido
+    ldw     r8, 16(sp)
+    wrctl   estatus, r8
+    ldw     ea, 12(sp)
     ldw     r9, 8(sp)
     ldw     r8, 4(sp)
     ldw     ra, 0(sp)
-    addi    sp, sp, 32
+    addi    sp, sp, 20
 
     eret
 

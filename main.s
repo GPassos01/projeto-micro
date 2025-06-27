@@ -97,17 +97,30 @@ POLLING_WRITE:
     addi        r9, r9, 1
     br          PRINTF_LOOP
 
-# --- 2. Aguarda e lê a entrada do usuário via UART ---
+# --- 2. Aguarda e lê a entrada do usuário via UART (ROBUSTO COM INTERRUPÇÕES) ---
 POLLING_INPUT_LOOP:
+    # ✅ SOLUÇÃO: Polling resistente a interrupções
+    # Usa um contador para tentar múltiplas vezes mesmo com interrupções ativas
+    movi        r13, 1000           # Contador de tentativas para cada caractere
+    
+UART_RETRY_LOOP:
     # Lê o registrador de dados da UART. Os 16 bits superiores contêm o status.
     ldwio       r9, UART_DATA(r8)
 
     # Isola o bit 15 (RVALID). Se for 1, há um dado válido para leitura.
     andi        r11, r9, 0x8000
 
-    # Se RVALID for 0, não há dados. Continua esperando.
-    beq		    r11, r0, POLLING_INPUT_LOOP
+    # Se RVALID for 1, há dados válidos - processa imediatamente
+    bne         r11, r0, PROCESS_CHAR
 
+    # Não há dados - decrementa contador e tenta novamente
+    subi        r13, r13, 1
+    bne         r13, r0, UART_RETRY_LOOP
+    
+    # Timeout atingido, reinicia contador e continua tentando
+    br          POLLING_INPUT_LOOP
+
+PROCESS_CHAR:
     # Dado é válido. Isola os 8 bits inferiores, que contêm o caractere recebido.
     andi        r11, r9, 0xFF
 
@@ -124,6 +137,7 @@ POLLING_INPUT_LOOP:
     # Avança para a próxima posição no buffer.
     addi        r10, r10, 1
 
+    # Continua lendo próximo caractere
     br          POLLING_INPUT_LOOP
 
 # --- 3. Processa o comando recebido ---
