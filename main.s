@@ -304,11 +304,6 @@ PROCESSAR_TICK_CRONOMETRO:
     stw         r16, 4(sp)               # Registrador temporário
     stw         r17, 0(sp)               # Registrador temporário
     
-    # === DEBUG: MOSTRA "1111" PARA CONFIRMAR QUE FOI CHAMADA ===
-    movia       r1, HEX_BASE
-    movia       r2, 0x06060606           # Código para "1111" em todos displays
-    stwio       r2, (r1)
-    
     # Verifica se cronômetro está ativo
     movia       r16, CRONOMETRO_ATIVO
     ldw         r17, (r16)
@@ -343,8 +338,6 @@ TICK_CRONO_EXIT:
     addi        sp, sp, 12               # Libera stack
     ret
 
-# (Função de teste removida - não mais necessária)
-
 #========================================================================================================================================
 # ATUALIZAÇÃO DE DISPLAY DO CRONÔMETRO
 #========================================================================================================================================
@@ -364,47 +357,38 @@ ATUALIZAR_DISPLAY_CRONOMETRO:
     movia       r1, CRONOMETRO_SEGUNDOS
     ldw         r16, (r1)
     
-    # === CÁLCULO CORRETO: MINUTOS E SEGUNDOS ===
-    # Minutos = segundos_totais / 60
-    movi        r1, 60
-    div         r17, r16, r1             # r17 = minutos
+    # === DEBUG SIMPLES: MOSTRA APENAS SEGUNDOS (SEM MINUTOS) ===
+    # Vamos mostrar os segundos nos 2 displays da direita (HEX1 HEX0)
+    # E deixar os da esquerda zerados (HEX3 HEX2)
     
-    # Segundos restantes = segundos_totais % 60
-    mul         r2, r17, r1              # r2 = minutos * 60
-    sub         r18, r16, r2             # r18 = segundos restantes
-    
-    # === MONTAGEM DO VALOR DOS DISPLAYS ===
     mov         r19, r0                  # Valor final = 0
     
-    # === HEX3: DEZENAS DE MINUTOS (bits 31-24) ===
-    movi        r1, 10
-    div         r21, r17, r1             # Dezenas de minutos
-    mov         r4, r21
+    # === HEX3: SEMPRE 0 (bits 31-24) ===
+    mov         r4, r0
     call        CODIFICAR_7SEG
-    slli        r22, r2, 24             # Shift para bits 31-24
+    slli        r22, r2, 24
     or          r19, r19, r22
     
-    # === HEX2: UNIDADES DE MINUTOS (bits 23-16) ===
-    mul         r20, r21, r1             # dezenas * 10
-    sub         r21, r17, r20            # Unidades de minutos
-    mov         r4, r21
+    # === HEX2: SEMPRE 0 (bits 23-16) ===
+    mov         r4, r0
     call        CODIFICAR_7SEG
-    slli        r22, r2, 16             # Shift para bits 23-16
+    slli        r22, r2, 16
     or          r19, r19, r22
     
     # === HEX1: DEZENAS DE SEGUNDOS (bits 15-8) ===
-    div         r21, r18, r1             # Dezenas de segundos
+    movi        r1, 10
+    div         r21, r16, r1             # Dezenas
     mov         r4, r21
     call        CODIFICAR_7SEG
-    slli        r22, r2, 8              # Shift para bits 15-8
+    slli        r22, r2, 8
     or          r19, r19, r22
     
     # === HEX0: UNIDADES DE SEGUNDOS (bits 7-0) ===
     mul         r20, r21, r1             # dezenas * 10
-    sub         r21, r18, r20            # Unidades de segundos
+    sub         r21, r16, r20            # Unidades
     mov         r4, r21
     call        CODIFICAR_7SEG
-    or          r19, r19, r2             # Adiciona aos bits 7-0 (sem shift)
+    or          r19, r19, r2
     
     # === ESCREVE NO HARDWARE ===
     movia       r1, HEX_BASE
