@@ -15,6 +15,9 @@
 .extern CRONOMETRO_TICK_FLAG
 .extern CONFIGURAR_TIMER
 .extern PARAR_TIMER
+# Para interação com animação
+.extern FLAG_INTERRUPCAO
+.extern RESTAURAR_ESTADO_LEDS
 
 #========================================================================================================================================
 # Definições e Constantes
@@ -58,9 +61,17 @@ _cronometro:
     # r4: string de comando
     # r8: operação (0 ou 1)
 
-    # Parseia a operação (char na posição 1)
-    ldb         r8, 1(r4)
-    subi        r8, r8, ASCII_ZERO      # Converte '0'/'1' para 0/1
+    # Parseia a operação considerando espaço opcional
+    # Primeiro assume que o formato é "2x" (sem espaço)
+    ldb         r8, 1(r4)                  # Segundo caractere
+    movi        r9, ' '                    # ASCII espaço (0x20)
+    bne         r8, r9, PARSE_OP_OK        # Se não é espaço, ok
+
+    # Se o segundo caractere é espaço, pega o terceiro
+    ldb         r8, 2(r4)
+
+PARSE_OP_OK:
+    subi        r8, r8, ASCII_ZERO         # Converte '0'/'1' em 0/1
 
     # Executa a operação
     beq         r8, r0, INICIAR_CRONOMETRO
@@ -74,6 +85,17 @@ INICIAR_CRONOMETRO:
     movia       r8, CRONOMETRO_ATIVO
     ldw         r9, (r8)
     bne         r9, r0, CRONOMETRO_JA_ATIVO
+
+    # Se uma animação estiver ativa, desativa-a antes de iniciar o cronômetro
+    movia       r10, FLAG_INTERRUPCAO
+    ldw         r11, (r10)
+    beq         r11, r0, CONTINUAR_INICIO_CRONO   # Nenhuma animação ativa
+
+    # Limpa flag e restaura LEDs salvos pela animação
+    stw         r0, (r10)
+    call        RESTAURAR_ESTADO_LEDS
+
+CONTINUAR_INICIO_CRONO:
     call        INICIALIZAR_ESTADO_CRONOMETRO
     # Configura e inicia timer do cronômetro
     movia       r4, CRONOMETRO_PERIODO

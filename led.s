@@ -9,6 +9,7 @@
 
 # Referência para símbolo global definido em main.s
 .extern LED_STATE
+.extern FLAG_INTERRUPCAO
 
 #========================================================================================================================================
 # Definições e Constantes
@@ -37,6 +38,11 @@ _led:
     stw         ra, 4(sp)               # Salva endereço de retorno
     stw         fp, 0(sp)               # Salva o frame pointer antigo
     mov         fp, sp                  # Aponta o fp para o novo frame
+
+    # Se animação está ativa, não altera LEDs para evitar conflito
+    movia       r12, FLAG_INTERRUPCAO
+    ldw         r13, (r12)
+    bne         r13, r0, FIM_LED_ABI
 
     # Registradores usados (Todos Caller-Saved, seguros para uso temporário):
     # r4: string de comando (argumento)

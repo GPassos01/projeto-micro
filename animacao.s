@@ -13,6 +13,8 @@
 .extern _update_animation_step
 .extern CONFIGURAR_TIMER
 .extern PARAR_TIMER
+.extern CRONOMETRO_ATIVO
+.global RESTAURAR_ESTADO_LEDS
 
 #========================================================================================================================================
 # Definições e Constantes
@@ -78,6 +80,10 @@ INICIAR_ANIMACAO:
     
     # Determina posição inicial baseada na direção do SW0
     call        DETERMINAR_POSICAO_INICIAL
+    
+    # Se havia cronômetro em execução, desativa-o
+    movia       r1, CRONOMETRO_ATIVO
+    stw         r0, (r1)
     
     # Configura e inicia timer da animação
     movia       r4, ANIMACAO_PERIODO  # Argumento para a função
