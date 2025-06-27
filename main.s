@@ -48,7 +48,7 @@
 _start:
     # --- INICIALIZAÇÃO SISTEMA (ABI Compliant) ---
     # Stack pointer para topo da memória (ABI requirement)
-    movia       sp, 0x07FFFFFFC          # Stack cresce para baixo
+    movia       sp, 0x0001FFFC          # Stack cresce para baixo
     
     # Frame pointer inicial (ABI requirement)
     mov         fp, sp
