@@ -328,11 +328,7 @@ STORE_SECONDS:
     stw         r17, (r16)
     
     # Atualiza displays
-    # call        ATUALIZAR_DISPLAY_CRONOMETRO
-    
-    # === TESTE DE DISPLAY ===
-    # Força exibição de "01:23" para teste
-    call        TESTE_DISPLAY_CRONOMETRO
+    call        ATUALIZAR_DISPLAY_CRONOMETRO
     
 TICK_CRONO_EXIT:
     # --- Stack Frame Epilogue (CRÍTICO!) ---
@@ -342,57 +338,7 @@ TICK_CRONO_EXIT:
     addi        sp, sp, 12               # Libera stack
     ret
 
-#========================================================================================================================================
-# TESTE DE DISPLAY DO CRONÔMETRO (FORÇAR 01:23)
-#========================================================================================================================================
-TESTE_DISPLAY_CRONOMETRO:
-    # --- Stack Frame Prologue ---
-    subi        sp, sp, 16
-    stw         ra, 12(sp)
-    stw         r16, 8(sp)
-    stw         r17, 4(sp)
-    stw         r18, 0(sp)
-    
-    # === MAPEAMENTO CORRETO: UM REGISTRADOR COM 4 CAMPOS ===
-    # HEX_BASE = 0x10000020 (32 bits)
-    # Bits 31-24: HEX3, Bits 23-16: HEX2, Bits 15-8: HEX1, Bits 7-0: HEX0
-    
-    movia       r16, HEX_BASE
-    mov         r17, r0                  # Valor final dos displays
-    
-    # === CODIFICA DÍGITO 0 PARA HEX3 (bits 31-24) ===
-    mov         r4, r0                   # Dígito 0
-    call        CODIFICAR_7SEG
-    slli        r18, r2, 24             # Shift para bits 31-24
-    or          r17, r17, r18           # Adiciona ao valor final
-    
-    # === CODIFICA DÍGITO 1 PARA HEX2 (bits 23-16) ===
-    movi        r4, 1                   # Dígito 1
-    call        CODIFICAR_7SEG
-    slli        r18, r2, 16             # Shift para bits 23-16
-    or          r17, r17, r18           # Adiciona ao valor final
-    
-    # === CODIFICA DÍGITO 2 PARA HEX1 (bits 15-8) ===
-    movi        r4, 2                   # Dígito 2
-    call        CODIFICAR_7SEG
-    slli        r18, r2, 8              # Shift para bits 15-8
-    or          r17, r17, r18           # Adiciona ao valor final
-    
-    # === CODIFICA DÍGITO 3 PARA HEX0 (bits 7-0) ===
-    movi        r4, 3                   # Dígito 3
-    call        CODIFICAR_7SEG
-    or          r17, r17, r2            # Adiciona aos bits 7-0 (sem shift)
-    
-    # === ESCREVE VALOR FINAL NO REGISTRADOR ===
-    stwio       r17, (r16)              # Escreve todos os 4 displays de uma vez
-    
-    # --- Stack Frame Epilogue ---
-    ldw         r18, 0(sp)
-    ldw         r17, 4(sp)
-    ldw         r16, 8(sp)
-    ldw         ra, 12(sp)
-    addi        sp, sp, 16
-    ret
+# (Função de teste removida - não mais necessária)
 
 #========================================================================================================================================
 # ATUALIZAÇÃO DE DISPLAY DO CRONÔMETRO
