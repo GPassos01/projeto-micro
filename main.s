@@ -47,11 +47,6 @@
 #========================================================================================================================================
 _start:
     # --- INICIALIZAÇÃO SISTEMA (ABI Compliant) ---
-    # Stack pointer para topo da memória (ABI requirement)
-    movia       sp, 0x07FFFFFFC          # Stack cresce para baixo
-    
-    # Frame pointer inicial (ABI requirement)
-    mov         fp, sp
     
     # Inicialização usando registradores caller-saved (r1-r15)
     call        INICIALIZAR_SISTEMA
