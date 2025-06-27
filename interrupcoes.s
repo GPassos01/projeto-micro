@@ -12,14 +12,13 @@
 
 # Rotina de tratamento de exceções - VERSÃO ULTRA-RÁPIDA
 INTERRUPCAO_HANDLER:
-    # ✅ CONTEXTO MÍNIMO para máxima velocidade (compatível com UART)
-    subi    sp, sp, 20
+    # ✅ CONTEXTO MÍNIMO - NÃO salva EA (será modificado na ISR)
+    subi    sp, sp, 16
     stw     ra, 0(sp)
     stw     r8, 4(sp)
     stw     r9, 8(sp)
-    stw     ea, 12(sp)
     rdctl   r8, estatus
-    stw     r8, 16(sp)
+    stw     r8, 12(sp)
 
     # ✅ ISR ULTRA-RÁPIDA - Usa apenas r8 e r9 para máxima velocidade
     rdctl   r8, ipending
@@ -72,14 +71,13 @@ REABILITAR_INTERRUPCOES:
     # As interrupções serão re-habilitadas apenas quando a animação iniciar novamente
 
 END_HANDLER:
-    # ✅ RESTAURA CONTEXTO MÍNIMO - Ultra-rápido
-    ldw     r8, 16(sp)
+    # ✅ RESTAURA CONTEXTO - EA foi modificado durante ISR (mantém valor decrementado)
+    ldw     r8, 12(sp)
     wrctl   estatus, r8
-    ldw     ea, 12(sp)
     ldw     r9, 8(sp)
     ldw     r8, 4(sp)
     ldw     ra, 0(sp)
-    addi    sp, sp, 20
+    addi    sp, sp, 16
 
     eret
 
