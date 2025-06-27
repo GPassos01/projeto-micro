@@ -178,32 +178,31 @@ INICIALIZAR_INTERRUPCAO_TEMPORIZADOR:
 # Seção de Dados
 #========================================================================================================================================
 
-# Mensagem de prompt a ser exibida para o usuário.
-MSG_PROMPT:
-    .asciz "Entre com o comando: "
-
-# Buffer para armazenar a entrada do usuário.
-.align 2
-BUFFER_ESCRITA:
-    .skip 100
+# Primeiro, alinhamos e definimos as variáveis word
+.align 4
 
 # Variável global para o estado dos LEDs (exemplo, pode ser usada por _led.s).
 .global LED_STATE
-.align 2
 LED_STATE:
     .word 0
 
 # Flag para comunicação entre a ISR e o código principal.
 .global FLAG_INTERRUPCAO
-.align 2
 FLAG_INTERRUPCAO:
     .word 0
 
 # Variável para guardar o estado da animação dos LEDs.
 .global ANIMATION_STATE
-.align 2
 ANIMATION_STATE:
     .word 0x01
+
+# Buffer para armazenar a entrada do usuário.
+BUFFER_ESCRITA:
+    .skip 100
+
+# Mensagem de prompt a ser exibida para o usuário (no final para evitar problemas de alinhamento).
+MSG_PROMPT:
+    .asciz "Entre com o comando: "
 
 # Declaração do handler de interrupção para que o linker possa encontrá-lo.
 .global INTERRUPCAO_HANDLER
