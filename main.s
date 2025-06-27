@@ -25,6 +25,10 @@
 # --- Endereços de Periféricos (Memory-Mapped I/O) ---
 .equ LED_BASE,          0x10000000      # LEDs vermelhos (18 LEDs: 0-17)
 .equ HEX_BASE,          0x10000020      # Displays 7-segmentos (HEX3-0)
+.equ HEX0_BASE,         0x10000020      # Display HEX0 (unidades segundos)
+.equ HEX1_BASE,         0x10000024      # Display HEX1 (dezenas segundos)  
+.equ HEX2_BASE,         0x10000028      # Display HEX2 (unidades minutos)
+.equ HEX3_BASE,         0x1000002C      # Display HEX3 (dezenas minutos)
 .equ SW_BASE,           0x10000040      # Switches (SW17-0)
 .equ KEY_BASE,          0x10000050      # Botões (KEY3-0)
 .equ JTAG_UART_BASE,    0x10001000      # JTAG UART
@@ -83,11 +87,14 @@ INICIALIZAR_SISTEMA:
     stwio       r0, (r16)
     
     # Inicializa displays 7-segmentos (todos apagados)
-    movia       r16, HEX_BASE
-    stwio       r0, 0(r16)               # HEX0
-    stwio       r0, 4(r16)               # HEX1  
-    stwio       r0, 8(r16)               # HEX2
-    stwio       r0, 12(r16)              # HEX3
+    movia       r16, HEX0_BASE
+    stwio       r0, (r16)                # HEX0
+    movia       r16, HEX1_BASE
+    stwio       r0, (r16)                # HEX1  
+    movia       r16, HEX2_BASE
+    stwio       r0, (r16)                # HEX2
+    movia       r16, HEX3_BASE
+    stwio       r0, (r16)                # HEX3
     
     # Inicializa estado dos LEDs
     movia       r16, LED_STATE
@@ -355,27 +362,31 @@ TESTE_DISPLAY_CRONOMETRO:
     stw         r16, 4(sp)
     stw         r17, 0(sp)
     
-    movia       r16, HEX_BASE
+    # === TESTE COM ENDEREÇOS INDIVIDUAIS ===
     
-    # Força HEX3 = 0 (dezenas de minutos)
+    # HEX3 = 0 (dezenas de minutos)
     mov         r4, r0                   # Dígito 0
     call        CODIFICAR_7SEG
-    stwio       r2, 12(r16)              # HEX3
+    movia       r16, HEX3_BASE
+    stwio       r2, (r16)
     
-    # Força HEX2 = 1 (unidades de minutos)
+    # HEX2 = 1 (unidades de minutos)
     movi        r4, 1                    # Dígito 1
     call        CODIFICAR_7SEG
-    stwio       r2, 8(r16)               # HEX2
+    movia       r16, HEX2_BASE
+    stwio       r2, (r16)
     
-    # Força HEX1 = 2 (dezenas de segundos)
+    # HEX1 = 2 (dezenas de segundos)
     movi        r4, 2                    # Dígito 2
     call        CODIFICAR_7SEG
-    stwio       r2, 4(r16)               # HEX1
+    movia       r16, HEX1_BASE
+    stwio       r2, (r16)
     
-    # Força HEX0 = 3 (unidades de segundos)
+    # HEX0 = 3 (unidades de segundos)
     movi        r4, 3                    # Dígito 3
     call        CODIFICAR_7SEG
-    stwio       r2, 0(r16)               # HEX0
+    movia       r16, HEX0_BASE
+    stwio       r2, (r16)
     
     # --- Stack Frame Epilogue ---
     ldw         r17, 0(sp)
