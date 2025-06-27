@@ -52,15 +52,15 @@ _led:
     ldw         r8, (r10)               # r8 = current_state
 
     # 1. Parseia o número do LED (xx)
-    # Extrai a dezena (char na posição 2)
-    ldb         r9, 2(r4)
+    # Extrai a dezena (char na posição 3, pulando o espaço)
+    ldb         r9, 3(r4)
     subi        r9, r9, ASCII_ZERO
     slli        r10, r9, 3              # r10 = dezena * 8 
     slli        r9, r9, 1               # r9 = dezena * 2
     add         r9, r9, r10             # r9 = dezena * 10
     
-    # Adiciona a unidade (char na posição 3)
-    ldb         r10, 3(r4)
+    # Adiciona a unidade (char na posição 4)
+    ldb         r10, 4(r4)
     subi        r10, r10, ASCII_ZERO
     add         r9, r9, r10             # r9 = led_number
 

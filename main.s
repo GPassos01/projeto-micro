@@ -125,23 +125,23 @@ PROCESSAR_TICKS_SISTEMA:
     # --- Verifica tick da animação ---
     movia       r16, TIMER_TICK_FLAG
     ldw         r17, (r16)
-    beq         r17, r0, CHECK_CRONOMETRO_TICK
+    beq         r17, r0, CHECK_CRONOMETRO_TICK_FIX
     
-    # Limpa flag e processa animação
+    # CORRIGIDO: Limpa a flag e chama a função de atualização correta
     stw         r0, (r16)
-    call        PROCESSAR_TICK_ANIMACAO
+    call        _update_animation_step
     
-CHECK_CRONOMETRO_TICK:
+CHECK_CRONOMETRO_TICK_FIX:
     # --- Verifica tick do cronômetro ---
     movia       r16, CRONOMETRO_TICK_FLAG
     ldw         r17, (r16)
-    beq         r17, r0, TICKS_EXIT
+    beq         r17, r0, TICKS_EXIT_FIX
     
-    # Limpa flag e processa cronômetro
+    # Limpa flag e processa cronômetro (função de suporte mantida por complexidade)
     stw         r0, (r16)
     call        PROCESSAR_TICK_CRONOMETRO
     
-TICKS_EXIT:
+TICKS_EXIT_FIX:
     # --- Stack Frame Epilogue ---
     ldw         r17, 0(sp)
     ldw         r16, 4(sp)
@@ -312,18 +312,6 @@ CMD_EXIT:
 #========================================================================================================================================
 # ROTINAS DE SUPORTE PARA TICKS
 #========================================================================================================================================
-PROCESSAR_TICK_ANIMACAO:
-    # Verifica se animação está ativa
-    movia       r1, FLAG_INTERRUPCAO
-    ldw         r2, (r1)
-    beq         r2, r0, TICK_ANIM_EXIT
-    
-    # Chama função de atualização da animação
-    call        _update_animation_step
-    
-TICK_ANIM_EXIT:
-    ret
-
 PROCESSAR_TICK_CRONOMETRO:
     # Verifica se cronômetro está ativo
     movia       r1, CRONOMETRO_ATIVO
