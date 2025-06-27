@@ -306,7 +306,7 @@ PROCESSAR_TICK_CRONOMETRO:
     
     # === DEBUG: MOSTRA "1111" PARA CONFIRMAR QUE FOI CHAMADA ===
     movia       r1, HEX_BASE
-    movi        r2, 0x06060606           # Código para "1111" em todos displays
+    movia       r2, 0x06060606           # Código para "1111" em todos displays
     stwio       r2, (r1)
     
     # Verifica se cronômetro está ativo
