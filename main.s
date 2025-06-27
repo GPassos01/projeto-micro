@@ -61,8 +61,8 @@ _start:
     # O vetor de exceções está configurado no endereço 0x20.
     # A rotina INTERRUPCAO_HANDLER será chamada através do EXCEPTION_ENTRY.
 
-    # TEMPORARIAMENTE DESABILITADO: Problema conhecido com UART e interrupções
-    # call        INICIALIZAR_INTERRUPCAO_TEMPORIZADOR
+    # Habilita o timer para interrupções (animação e cronômetro)
+    call        INICIALIZAR_INTERRUPCAO_TEMPORIZADOR
 
 #========================================================================================================================================
 # Loop Principal: Imprimir Prompt, Ler e Processar Comando
@@ -117,6 +117,10 @@ POLLING_INPUT_LOOP:
     # Compara o caractere com o código ASCII para 'Enter' (Newline, \n, valor 10).
     movi		r12, 10
     beq         r11, r12, FINISH_READ   # Se for Enter, finaliza a leitura.
+
+    # Compara também com '\r' (carriage return, valor 13)
+    movi        r12, 13
+    beq         r11, r12, FINISH_READ   # Se for CR, finaliza a leitura.
 
     # Armazena o caractere lido no buffer de escrita.
     stb         r11, (r10)

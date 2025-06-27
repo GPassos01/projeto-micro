@@ -121,22 +121,22 @@ TRATAR_ANIMACAO:
 
 
 ESQUERDA_DIREITA:
-    # Desloca o bit para a esquerda (efeito de mover para a esquerda).
+    # Desloca o bit para a esquerda (efeito visual: LED move da esquerda para direita).
     slli        r11, r11, 1
 
-    # Se o bit "estourar" (passar do último LED), reinicia a animação.
-    movia       r12, 0b1000000000000000000 # Posição após o último LED (considerando 18 LEDs) 
+    # Verifica se passou do LED 17 (0x20000 = 2^17)
+    movia       r12, 0x40000       # Posição após LED17 (2^18)
     bne         r11, r12, SALVAR_ESTADO_LED
-    movi        r11, 1          # Reinicia no primeiro LED
+    movi        r11, 1             # Reinicia no LED 0
     br          SALVAR_ESTADO_LED
 
 DIREITA_ESQUERDA:
-    # Desloca o bit para a direita (efeito de mover para a direita).
+    # Desloca o bit para a direita (efeito visual: LED move da direita para esquerda).
     srli        r11, r11, 1
 
-    # Se o bit "sumir" (passar do primeiro LED), reinicia no último.
+    # Se chegou a zero, reinicia no LED 17
     bne         r11, r0, SALVAR_ESTADO_LED
-    movi        r11, 0b1000000000000000000 # Reinicia no último LED (LED17)
+    movia       r11, 0x20000       # Reinicia no LED 17 (2^17)
 
 SALVAR_ESTADO_LED:
     # Salva o novo estado da animação.

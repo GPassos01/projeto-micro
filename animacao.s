@@ -3,8 +3,10 @@
 # Referências para símbolos globais definidos em main.s
 .extern FLAG_INTERRUPCAO
 .extern ANIMATION_STATE
+.extern LED_STATE
 
 .equ LED_BASE,         0x10000000
+.equ SW_BASE,          0x10000040
 
 _animacao:
     # O registrador r9 ainda aponta para a string de comando.
@@ -22,23 +24,46 @@ PARAR_ANIMACAO:
     movia       r10, FLAG_INTERRUPCAO
     stw         r0, (r10)
 
-    # Apaga todos os LEDs.
-    movia       r10, LED_BASE
-    stwio       r0, (r10)
+    # Restaura o estado anterior dos LEDs
+    movia       r10, LED_STATE
+    ldw         r11, (r10)
+    movia       r12, LED_BASE
+    stwio       r11, (r12)
 
     # Reseta o estado da animação para o início.
     movia       r10, ANIMATION_STATE
-    movi        r11, 1
-    stw         r11, (r10)
+    stw         r0, (r10)
     br          FIM_ANIMACAO
 
 INICIAR_ANIMACAO:
-    # Reseta a animação para o estado inicial (primeiro LED aceso).
-    movia		r10, ANIMATION_STATE
-    movi        r11, 1
-    stw         r11, (r10)
+    # Salva o estado atual dos LEDs antes da animação
+    movia       r10, LED_BASE
+    ldwio       r11, (r10)
+    movia       r12, LED_STATE
+    stw         r11, (r12)
+    
+    # Verifica direção inicial baseada no SW0
+    movia       r10, SW_BASE
+    ldwio       r11, (r10)
+    andi        r11, r11, 1        # Isola SW0
+    
+    # Define posição inicial baseada na direção
+    movia       r10, ANIMATION_STATE
+    beq         r11, r0, ESQUERDA_DIREITA_INIT
+    
+DIREITA_ESQUERDA_INIT:
+    # SW0=1: Inicia da direita (LED 17)
+    movia       r11, 0x20000      # LED 17 = bit 17 = 2^17
+    br          SALVAR_ESTADO_INICIAL
+    
+ESQUERDA_DIREITA_INIT:
+    # SW0=0: Inicia da esquerda (LED 0)
+    movi        r11, 1            # LED 0 = bit 0 = 2^0
+
+SALVAR_ESTADO_INICIAL:
+    stw         r11, (r10)        # Salva estado inicial
     movia       r12, LED_BASE
-    stwio       r11, (r12)      # Acende o primeiro LED imediatamente
+    stwio       r11, (r12)        # Acende LED inicial
 
     # Define a flag para 1, ativando a animação na ISR do timer.
     movia		r10, FLAG_INTERRUPCAO
