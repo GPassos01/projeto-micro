@@ -117,31 +117,32 @@ CANCELAR_CRONOMETRO:
     
     # Animação não está ativa - pode parar timer completamente
     call        PARAR_TIMER_SISTEMA
-    br          FINALIZAR_CANCELAMENTO
+    br          FINALIZAR_CANCELAMENTO_CRONOMETRO
     
 CANCELAR_APENAS_CRONOMETRO:
-    # Animação está ativa - não para timer, apenas desativa cronômetro
-    # O timer continua rodando para a animação
+    # Animação está ativa - reconfigura timer para período da animação
+    call        RECONFIGURAR_TIMER_PARA_ANIMACAO
     
-FINALIZAR_CANCELAMENTO:
+FINALIZAR_CANCELAMENTO_CRONOMETRO:
     # Desativa cronômetro
     movia       r1, CRONOMETRO_ATIVO
     stw         r0, (r1)
     
-    # Zera contador
-    movia       r1, CRONOMETRO_SEGUNDOS
-    stw         r0, (r1)
-    
-    # Limpa pausado
-    movia       r1, CRONOMETRO_PAUSADO
+    # Zera flag de tick do cronômetro
+    movia       r1, CRONOMETRO_TICK_FLAG
     stw         r0, (r1)
     
     # Zera contador de ticks
     movia       r1, CRONOMETRO_CONTADOR_TICKS
     stw         r0, (r1)
     
+    # Zera cronômetro
+    movia       r1, CRONOMETRO_SEGUNDOS
+    stw         r0, (r1)
+    
     # Limpa displays
-    call        LIMPAR_DISPLAYS
+    movia       r1, HEX3_HEX0_BASE
+    stw         r0, (r1)
     
     # Mensagem de confirmação
     movia       r4, MSG_CRONOMETRO_CANCELADO
@@ -404,4 +405,35 @@ CONFIGURAR_KEY1_INTERRUPCAO:
 .extern MSG_CRONOMETRO_CANCELADO
 .extern ATUALIZAR_DISPLAY_CRONOMETRO
 .extern CODIFICAR_7SEG
+
+RECONFIGURAR_TIMER_PARA_ANIMACAO:
+    # Salva registradores
+    subi        sp, sp, 8
+    stw         ra, 4(sp)
+    stw         r16, 0(sp)
+    
+    # Para o timer atual
+    movia       r16, TIMER_BASE
+    stwio       r0, 4(r16)         # Para o timer
+    
+    # Configura período para animação (10.000.000 ciclos = 200ms @ 50MHz)
+    movia       r1, 0x00989680     # 10.000.000 em decimal
+    stwio       r1, 8(r16)         # periodl
+    srli        r1, r1, 16
+    stwio       r1, 12(r16)        # periodh
+    
+    # Reinicia o timer
+    movi        r1, 0x7            # START=1, CONT=1, ITO=1
+    stwio       r1, 4(r16)
+    
+    # Restaura registradores
+    ldw         r16, 0(sp)
+    ldw         ra, 4(sp)
+    addi        sp, sp, 8
+    ret
+
+.global INICIAR_CRONOMETRO
+.global CANCELAR_CRONOMETRO
+.global PROCESSAR_TICK_CRONOMETRO
+.global RECONFIGURAR_TIMER_PARA_ANIMACAO
 

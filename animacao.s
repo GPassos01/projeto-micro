@@ -7,6 +7,11 @@
 
 .global _animacao
 .global _update_animation_step
+.global INICIAR_ANIMACAO
+.global PARAR_ANIMACAO
+.global SALVAR_ESTADO_LEDS
+.global RESTAURAR_ESTADO_LEDS
+.global RECONFIGURAR_TIMER_PARA_CRONOMETRO
 
 # Referências para símbolos globais definidos em interrupcoes.s
 .extern FLAG_INTERRUPCAO
@@ -103,8 +108,8 @@ PARAR_ANIMACAO:
     br          FINALIZAR_PARADA_ANIMACAO
     
 PARAR_APENAS_ANIMACAO:
-    # Cronômetro está ativo - não para timer, apenas desativa animação
-    # O timer continua rodando para o cronômetro
+    # Cronômetro está ativo - reconfigura timer para período do cronômetro
+    call        RECONFIGURAR_TIMER_PARA_CRONOMETRO
     
 FINALIZAR_PARADA_ANIMACAO:
     # Desativa flag de animação
@@ -379,6 +384,32 @@ PARAR_TIMER_ANIMACAO:
     wrctl       status, r0              # Desabilita PIE
     
     # --- Stack Frame Epilogue ---
+    ldw         r16, 0(sp)
+    ldw         ra, 4(sp)
+    addi        sp, sp, 8
+    ret
+
+RECONFIGURAR_TIMER_PARA_CRONOMETRO:
+    # Salva registradores
+    subi        sp, sp, 8
+    stw         ra, 4(sp)
+    stw         r16, 0(sp)
+    
+    # Para o timer atual
+    movia       r16, TIMER_BASE
+    stwio       r0, 4(r16)         # Para o timer
+    
+    # Configura período para cronômetro (50.000.000 ciclos = 1s @ 50MHz)
+    movia       r1, 0x02FAF080     # 50.000.000 em decimal
+    stwio       r1, 8(r16)         # periodl
+    srli        r1, r1, 16
+    stwio       r1, 12(r16)        # periodh
+    
+    # Reinicia o timer
+    movi        r1, 0x7            # START=1, CONT=1, ITO=1
+    stwio       r1, 4(r16)
+    
+    # Restaura registradores
     ldw         r16, 0(sp)
     ldw         ra, 4(sp)
     addi        sp, sp, 8
