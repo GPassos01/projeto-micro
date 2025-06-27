@@ -329,11 +329,8 @@ LIMPAR_DISPLAYS:
     
     movia       r16, HEX_BASE
     
-    # Limpa todos os displays
-    stwio       r0, HEX0_OFFSET(r16)     # HEX0
-    stwio       r0, HEX1_OFFSET(r16)     # HEX1
-    stwio       r0, HEX2_OFFSET(r16)     # HEX2
-    stwio       r0, HEX3_OFFSET(r16)     # HEX3
+    # Limpa todos os displays de uma vez (32 bits)
+    stwio       r0, (r16)               # Escreve 0x00000000 em todos displays
     
     # --- Stack Frame Epilogue ---
     ldw         r16, 0(sp)

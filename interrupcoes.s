@@ -41,45 +41,32 @@ INTERRUPCAO_HANDLER:
     # Decrementa ea para interrupções de hardware
     subi    ea, ea, 4
 
-    # --- LÓGICA DA ISR (INTELIGENTE COM DETECÇÃO DE TIMER) ---
+    # --- LÓGICA SIMPLIFICADA DA ISR ---
     
     # 1. Verifica se a interrupção veio do timer
     movia   r8, TIMER_BASE
     ldwio   r9, 0(r8)               # Lê registrador de status do timer
     andi    r9, r9, 1               # Isola o bit TO (timeout)
-    beq     r9, r0, ISR_EXIT_FIX    # Se não for timeout, é outra interrupção. Sai.
+    beq     r9, r0, ISR_EXIT_FIX    # Se não for timeout, sai
     
     # 2. Limpa a interrupção no hardware (CRÍTICO!)
     movi    r9, 1
     stwio   r9, 0(r8)
     
-    # 3. DETECÇÃO INTELIGENTE DO TIPO DE TIMER
-    # Lê o período configurado para determinar se é animação ou cronômetro
-    ldwio   r10, 8(r8)              # periodl (16 bits baixos)
-    ldwio   r9, 12(r8)              # periodh (16 bits altos)
-    slli    r9, r9, 16              # Shift bits altos
-    or      r9, r9, r10             # Combina período completo
+    # 3. VERIFICA QUAL SISTEMA ESTÁ ATIVO
+    # Verifica se cronômetro está ativo
+    movia   r8, CRONOMETRO_ATIVO
+    ldw     r9, (r8)
+    bne     r9, r0, TICK_CRONOMETRO_ATIVO
     
-    # Compara com período da animação (10M ciclos)
-    movia   r10, ANIMACAO_PERIODO
-    beq     r9, r10, TICK_ANIMACAO
-    
-    # Compara com período do cronômetro (50M ciclos)  
-    movia   r10, CRONOMETRO_PERIODO
-    beq     r9, r10, TICK_CRONOMETRO
-    
-    # Se não match, assume que é tick genérico
-    br      ISR_EXIT_FIX
-
-TICK_ANIMACAO:
-    # Sinaliza tick da animação
+    # Se cronômetro não ativo, assume animação
     movia   r8, TIMER_TICK_FLAG
     movi    r9, 1
     stw     r9, (r8)
     br      ISR_EXIT_FIX
 
-TICK_CRONOMETRO:
-    # Sinaliza tick do cronômetro
+TICK_CRONOMETRO_ATIVO:
+    # Cronômetro está ativo - seta flag do cronômetro
     movia   r8, CRONOMETRO_TICK_FLAG
     movi    r9, 1
     stw     r9, (r8)

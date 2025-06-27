@@ -304,6 +304,11 @@ PROCESSAR_TICK_CRONOMETRO:
     stw         r16, 4(sp)               # Registrador temporário
     stw         r17, 0(sp)               # Registrador temporário
     
+    # === DEBUG: MOSTRA "1111" PARA CONFIRMAR QUE FOI CHAMADA ===
+    movia       r1, HEX_BASE
+    movi        r2, 0x06060606           # Código para "1111" em todos displays
+    stwio       r2, (r1)
+    
     # Verifica se cronômetro está ativo
     movia       r16, CRONOMETRO_ATIVO
     ldw         r17, (r16)
