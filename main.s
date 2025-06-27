@@ -7,16 +7,10 @@
 
 .global _start
 
-#========================================================================================================================================
-# Vetor de Exceções - Deve estar no endereço 0x20
-#========================================================================================================================================
-.section .exceptions.entry, "xa"
-.org 0x20
-EXCEPTION_ENTRY:
-    # Salto para o handler de interrupção
-    br      INTERRUPCAO_HANDLER
+# Referências para variáveis definidas em interrupcoes.s (compilado primeiro)
+.extern FLAG_INTERRUPCAO
 
-# Retorna à seção de texto principal
+# Vetor de exceções movido para interrupcoes.s para melhor organização
 .section .text
 
 #========================================================================================================================================
@@ -235,15 +229,7 @@ INICIALIZAR_INTERRUPCAO_TEMPORIZADOR:
 LED_STATE:
     .word 0
 
-# Flag para comunicação entre a ISR e o código principal.
-.global FLAG_INTERRUPCAO
-FLAG_INTERRUPCAO:
-    .word 0
-
-# Variável para guardar o estado da animação dos LEDs.
-.global ANIMATION_STATE
-ANIMATION_STATE:
-    .word 0x00
+# Variáveis FLAG_INTERRUPCAO e ANIMATION_STATE movidas para interrupcoes.s
 
 # Buffer para armazenar a entrada do usuário.
 BUFFER_ESCRITA:

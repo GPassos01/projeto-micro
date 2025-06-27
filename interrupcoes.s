@@ -2,13 +2,22 @@
 
 .global INTERRUPCAO_HANDLER
 
-# Referências para símbolos globais definidos em main.s
-.extern FLAG_INTERRUPCAO
-.extern ANIMATION_STATE
-
+# CORRIGIDO: Variáveis movidas para cá (interrupcoes.s compilado primeiro)
 .equ TIMER_BASE,	0x10002000
 .equ SW_BASE,		0x10000040
 .equ LED_BASE,         0x10000000
+
+#========================================================================================================================================
+# Vetor de Exceções - CORRIGIDO: Agora no mesmo arquivo da ISR
+#========================================================================================================================================
+.section .exceptions.entry, "xa"
+.org 0x20
+EXCEPTION_ENTRY:
+    # Salto direto para o handler (sem br adicional)
+    br      INTERRUPCAO_HANDLER
+
+# Retorna à seção de texto
+.section .text
 
 # Rotina de tratamento de exceções - VERSÃO MINIMALISTA E ROBUSTA
 INTERRUPCAO_HANDLER:
@@ -94,3 +103,19 @@ END_HANDLER:
     addi    sp, sp, 32
 
     eret
+
+#========================================================================================================================================
+# Variáveis Globais - MOVIDAS para cá (primeiro arquivo compilado)
+#========================================================================================================================================
+.section .data
+.align 4
+
+# Flag para comunicação entre ISR e código principal
+.global FLAG_INTERRUPCAO
+FLAG_INTERRUPCAO:
+    .word 0
+
+# Estado da animação dos LEDs
+.global ANIMATION_STATE
+ANIMATION_STATE:
+    .word 0

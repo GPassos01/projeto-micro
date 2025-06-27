@@ -1,9 +1,9 @@
 .global _animacao
 
-# Referências para símbolos globais definidos em main.s
-.extern FLAG_INTERRUPCAO
-.extern ANIMATION_STATE
-.extern LED_STATE
+# Referências para símbolos globais
+.extern FLAG_INTERRUPCAO      # Definido em interrupcoes.s
+.extern ANIMATION_STATE       # Definido em interrupcoes.s  
+.extern LED_STATE             # Definido em main.s
 
 .equ LED_BASE,         0x10000000
 .equ SW_BASE,          0x10000040
