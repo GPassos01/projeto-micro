@@ -11,7 +11,7 @@
 .set noat
 
 # Símbolos exportados
-.global _cronometro
+.global cronometro
 
 # Símbolos externos necessários
 .extern CRONOMETRO_ATIVO                # Flag de ativação (interrupcoes.s)
@@ -38,7 +38,7 @@
 #   - "20" ou "20 " = iniciar cronômetro (reseta para 00:00)
 #   - "21" ou "21 " = cancelar cronômetro (para e limpa displays)
 #========================================================================================================================================
-_cronometro:
+cronometro:
     # === PRÓLOGO ABI COMPLETO ===
     subi        sp, sp, 32              # Aloca 32 bytes na stack (múltiplo de 4)
     stw         ra, 28(sp)              # Salva return address

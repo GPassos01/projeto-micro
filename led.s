@@ -11,7 +11,7 @@
 .set noat
 
 # Símbolos exportados
-.global _led
+.global led
 
 # Símbolos externos necessários
 .extern LED_STATE                       # Estado atual dos LEDs (main.s)
@@ -32,7 +32,7 @@
 #   - "00 xx" ou "00xx" = acender LED número xx (0-17)
 #   - "01 xx" ou "01xx" = apagar LED número xx (0-17)
 #========================================================================================================================================
-_led:
+led:
     # === PRÓLOGO ABI COMPLETO ===
     subi        sp, sp, 32              # Aloca 32 bytes na stack (múltiplo de 4)
     stw         ra, 28(sp)              # Salva return address

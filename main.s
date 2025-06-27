@@ -329,19 +329,19 @@ PROCESSAR_COMANDO:
 COMANDO_LED:
     # === CHAMA MÓDULO DE CONTROLE DE LEDs ===
     mov         r4, r16                 # r4 = comando (ABI)
-    call        _led                    # Função externa em led.s
+    call        led                     # Função externa em led.s
     br          FIM_COMANDO
 
 COMANDO_ANIMACAO:
     # === CHAMA MÓDULO DE ANIMAÇÃO ===
     mov         r4, r16                 # r4 = comando (ABI)
-    call        _animacao               # Função externa em animacao.s
+    call        animacao                # Função externa em animacao.s
     br          FIM_COMANDO
 
 COMANDO_CRONOMETRO:
     # === CHAMA MÓDULO DE CRONÔMETRO ===
     mov         r4, r16                 # r4 = comando (ABI)
-    call        _cronometro             # Função externa em cronometro.s
+    call        cronometro              # Função externa em cronometro.s
 
 FIM_COMANDO:
     # === EPÍLOGO ABI ===

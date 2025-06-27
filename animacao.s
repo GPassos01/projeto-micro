@@ -11,7 +11,7 @@
 .set noat
 
 # Símbolos exportados
-.global _animacao
+.global animacao
 .global _update_animation_step
 .global RESTAURAR_ESTADO_LEDS           # Exporta para uso pelo cronômetro
 
@@ -41,7 +41,7 @@
 #   - "11" ou "11 " = parar animação e restaurar estado anterior
 # Direção: SW0=0 (esquerda→direita), SW0=1 (direita→esquerda)
 #========================================================================================================================================
-_animacao:
+animacao:
     # === PRÓLOGO ABI COMPLETO ===
     subi        sp, sp, 32              # Aloca 32 bytes na stack (múltiplo de 4)
     stw         ra, 28(sp)              # Salva return address
