@@ -66,6 +66,9 @@ MAIN_LOOP:
     # --- 2. PROCESSA ENTRADA DA UART (NÃO-BLOQUEANTE) ---
     call        PROCESSAR_CHAR_UART
     
+    # --- 3. PROCESSA BOTÕES (NÃO-BLOQUEANTE) ---
+    call        PROCESSAR_BOTOES
+    
     # Volta imediatamente para o início do loop para continuar o polling
     br          MAIN_LOOP
 
@@ -248,6 +251,93 @@ FIM_PROCESSA_CHAR:
     ret
 
 #========================================================================================================================================
+# PROCESSAMENTO DE BOTÕES - ABI COMPLIANT
+#========================================================================================================================================
+PROCESSAR_BOTOES:
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 16
+    stw         ra, 12(sp)
+    stw         r16, 8(sp)               # Estado atual dos botões
+    stw         r17, 4(sp)               # Estado anterior dos botões
+    stw         r18, 0(sp)               # Botão pressionado (edge detection)
+    
+    # Lê estado atual dos botões
+    movia       r1, KEY_BASE
+    ldwio       r16, (r1)               # r16 = estado atual
+    
+    # Carrega estado anterior dos botões
+    movia       r1, BOTOES_ESTADO_ANTERIOR
+    ldw         r17, (r1)               # r17 = estado anterior
+    
+    # Detecta bordas de descida (botão pressionado)
+    # Botão pressionado = anterior era 1 e atual é 0
+    xor         r18, r16, r17           # XOR para detectar mudanças
+    and         r18, r18, r17           # AND com anterior para pegar descidas
+    
+    # Salva estado atual como anterior para próxima iteração
+    stw         r16, (r1)
+    
+    # Verifica se KEY1 foi pressionado (bit 1)
+    andi        r1, r18, 0x02           # Isola bit 1 (KEY1)
+    beq         r1, r0, BOTOES_EXIT     # Se não foi pressionado, sai
+    
+    # KEY1 foi pressionado - controla cronômetro
+    call        PROCESSAR_KEY1_CRONOMETRO
+    
+BOTOES_EXIT:
+    # --- Stack Frame Epilogue ---
+    ldw         r18, 0(sp)
+    ldw         r17, 4(sp)
+    ldw         r16, 8(sp)
+    ldw         ra, 12(sp)
+    addi        sp, sp, 16
+    ret
+
+#========================================================================================================================================
+# PROCESSAMENTO DO KEY1 PARA CRONÔMETRO
+#========================================================================================================================================
+PROCESSAR_KEY1_CRONOMETRO:
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 12
+    stw         ra, 8(sp)
+    stw         r16, 4(sp)
+    stw         r17, 0(sp)
+    
+    # Verifica se cronômetro está ativo
+    movia       r16, CRONOMETRO_ATIVO
+    ldw         r17, (r16)
+    beq         r17, r0, KEY1_EXIT      # Se não ativo, não faz nada
+    
+    # Cronômetro está ativo - alterna estado pausado/rodando
+    movia       r16, CRONOMETRO_PAUSADO
+    ldw         r17, (r16)
+    
+    # Inverte o estado
+    xori        r17, r17, 1             # 0 vira 1, 1 vira 0
+    stw         r17, (r16)
+    
+    # Mensagem de feedback
+    beq         r17, r0, CRONOMETRO_RETOMADO
+    
+    # Cronômetro pausado
+    movia       r4, MSG_CRONOMETRO_PAUSADO
+    call        IMPRIMIR_STRING
+    br          KEY1_EXIT
+    
+CRONOMETRO_RETOMADO:
+    # Cronômetro retomado
+    movia       r4, MSG_CRONOMETRO_RETOMADO
+    call        IMPRIMIR_STRING
+    
+KEY1_EXIT:
+    # --- Stack Frame Epilogue ---
+    ldw         r17, 0(sp)
+    ldw         r16, 4(sp)
+    ldw         ra, 8(sp)
+    addi        sp, sp, 12
+    ret
+
+#========================================================================================================================================
 # PROCESSAMENTO DE COMANDOS - ABI COMPLIANT
 #========================================================================================================================================
 PROCESSAR_COMANDO:
@@ -346,8 +436,8 @@ ATUALIZAR_DISPLAY_CRONOMETRO:
     subi        sp, sp, 32
     stw         ra, 28(sp)
     stw         r16, 24(sp)              # Segundos totais
-    stw         r17, 20(sp)              # Contador para divisão
-    stw         r18, 16(sp)              # Resultado divisão
+    stw         r17, 20(sp)              # Minutos
+    stw         r18, 16(sp)              # Segundos restantes
     stw         r19, 12(sp)              # Valor final dos displays
     stw         r20, 8(sp)               # Temp para cálculos
     stw         r21, 4(sp)               # Temp para dígitos
@@ -357,45 +447,61 @@ ATUALIZAR_DISPLAY_CRONOMETRO:
     movia       r1, CRONOMETRO_SEGUNDOS
     ldw         r16, (r1)
     
-    # === DIVISÃO MANUAL POR 10 (SEM USAR DIV) ===
-    # Implementa: dezenas = segundos / 10, unidades = segundos % 10
+    # === DIVISÃO MANUAL POR 60 PARA CALCULAR MINUTOS ===
+    mov         r17, r0                  # r17 = minutos (quociente)
+    mov         r18, r16                 # r18 = segundos restantes (dividendo)
     
-    mov         r17, r16                 # r17 = dividendo (segundos)
-    mov         r18, r0                  # r18 = quociente (dezenas)
+    # Loop: subtrai 60 até não poder mais
+DIVISAO_60_LOOP:
+    movi        r1, 60
+    blt         r18, r1, DIVISAO_60_FIM  # Se < 60, termina
+    sub         r18, r18, r1             # Subtrai 60
+    addi        r17, r17, 1              # Incrementa minutos
+    br          DIVISAO_60_LOOP
     
-    # Loop de divisão: subtrai 10 até não poder mais
-DIVISAO_LOOP:
-    movi        r1, 10
-    blt         r17, r1, DIVISAO_FIM     # Se < 10, termina
-    sub         r17, r17, r1             # Subtrai 10
-    addi        r18, r18, 1              # Incrementa quociente
-    br          DIVISAO_LOOP
-    
-DIVISAO_FIM:
-    # r18 = dezenas, r17 = unidades (resto)
+DIVISAO_60_FIM:
+    # r17 = minutos, r18 = segundos restantes
     
     mov         r19, r0                  # Valor final = 0
     
-    # === HEX3: SEMPRE 0 (bits 31-24) ===
-    mov         r4, r0
+    # === HEX3: DEZENAS DE MINUTOS (bits 31-24) ===
+    mov         r20, r0                  # Dezenas de minutos
+    mov         r21, r17                 # Copia minutos
+DEZENAS_MIN_LOOP:
+    movi        r1, 10
+    blt         r21, r1, DEZENAS_MIN_FIM
+    sub         r21, r21, r1
+    addi        r20, r20, 1
+    br          DEZENAS_MIN_LOOP
+DEZENAS_MIN_FIM:
+    mov         r4, r20
     call        CODIFICAR_7SEG
     slli        r22, r2, 24
     or          r19, r19, r22
     
-    # === HEX2: SEMPRE 0 (bits 23-16) ===
-    mov         r4, r0
+    # === HEX2: UNIDADES DE MINUTOS (bits 23-16) ===
+    mov         r4, r21                  # r21 já tem unidades de minutos
     call        CODIFICAR_7SEG
     slli        r22, r2, 16
     or          r19, r19, r22
     
     # === HEX1: DEZENAS DE SEGUNDOS (bits 15-8) ===
-    mov         r4, r18                  # Dezenas
+    mov         r20, r0                  # Dezenas de segundos
+    mov         r21, r18                 # Copia segundos restantes
+DEZENAS_SEG_LOOP:
+    movi        r1, 10
+    blt         r21, r1, DEZENAS_SEG_FIM
+    sub         r21, r21, r1
+    addi        r20, r20, 1
+    br          DEZENAS_SEG_LOOP
+DEZENAS_SEG_FIM:
+    mov         r4, r20
     call        CODIFICAR_7SEG
     slli        r22, r2, 8
     or          r19, r19, r22
     
     # === HEX0: UNIDADES DE SEGUNDOS (bits 7-0) ===
-    mov         r4, r17                  # Unidades
+    mov         r4, r21                  # r21 já tem unidades de segundos
     call        CODIFICAR_7SEG
     or          r19, r19, r2
     
@@ -481,6 +587,11 @@ BUFFER_ENTRADA:
 BUFFER_ENTRADA_POS:
     .word 0
 
+# Estado anterior dos botões (para detecção de borda)
+.global BOTOES_ESTADO_ANTERIOR
+BOTOES_ESTADO_ANTERIOR:
+    .word 0x0F                           # Inicializa com todos os botões em estado "não pressionado"
+
 # Tabela de codificação para displays 7-segmentos
 .global TABELA_7SEG
 TABELA_7SEG:
@@ -505,6 +616,12 @@ MSG_CRONOMETRO_INICIADO:
 MSG_CRONOMETRO_CANCELADO:
     .asciz "Cronometro cancelado!\n"
 
+MSG_CRONOMETRO_PAUSADO:
+    .asciz "Cronometro pausado!\n"
+
+MSG_CRONOMETRO_RETOMADO:
+    .asciz "Cronometro retomado!\n"
+
 MSG_DEBUG_TEMPO:
     .asciz "Tempo: %d segundos\n"
 
@@ -513,6 +630,8 @@ MSG_DEBUG_TEMPO:
 .global IMPRIMIR_STRING
 .global MSG_CRONOMETRO_INICIADO
 .global MSG_CRONOMETRO_CANCELADO
+.global MSG_CRONOMETRO_PAUSADO
+.global MSG_CRONOMETRO_RETOMADO
 .global ATUALIZAR_DISPLAY_CRONOMETRO
 .global CODIFICAR_7SEG
 .extern _led
