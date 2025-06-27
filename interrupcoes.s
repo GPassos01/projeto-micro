@@ -41,7 +41,7 @@ INTERRUPCAO_HANDLER:
     # Decrementa ea para interrupções de hardware
     subi    ea, ea, 4
 
-    # --- LÓGICA SIMPLIFICADA DA ISR ---
+    # --- LÓGICA DA ISR COM CONTADOR DE TICKS ---
     
     # 1. Verifica se a interrupção veio do timer
     movia   r8, TIMER_BASE
@@ -53,21 +53,56 @@ INTERRUPCAO_HANDLER:
     movi    r9, 1
     stwio   r9, 0(r8)
     
-    # 3. VERIFICA QUAL SISTEMA ESTÁ ATIVO
+    # 3. VERIFICA QUAL SISTEMA ESTÁ ATIVO E PROCESSA ADEQUADAMENTE
     # Verifica se cronômetro está ativo
     movia   r8, CRONOMETRO_ATIVO
     ldw     r9, (r8)
-    bne     r9, r0, TICK_CRONOMETRO_ATIVO
+    beq     r9, r0, APENAS_ANIMACAO
     
-    # Se cronômetro não ativo, assume animação
+    # Cronômetro está ativo - precisa contar ticks para 1 segundo
+    # Se animação também ativa: timer = 200ms, precisa 5 ticks = 1s
+    # Se apenas cronômetro: timer = 1s, precisa 1 tick = 1s
+    
+    # Verifica se animação também está ativa
+    movia   r8, ANIMATION_STATE
+    ldw     r9, (r8)
+    bne     r9, r0, CRONOMETRO_E_ANIMACAO
+    
+    # Apenas cronômetro ativo - conta direto
+    movia   r8, CRONOMETRO_TICK_FLAG
+    movi    r9, 1
+    stw     r9, (r8)
+    br      ISR_EXIT_FIX
+    
+CRONOMETRO_E_ANIMACAO:
+    # Ambos ativos - timer em 200ms, precisa contar 5 ticks para 1s
+    movia   r8, CRONOMETRO_CONTADOR_TICKS
+    ldw     r9, (r8)
+    addi    r9, r9, 1               # Incrementa contador
+    
+    # Verifica se chegou a 5 ticks (5 * 200ms = 1000ms = 1s)
+    movi    r10, 5
+    blt     r9, r10, SALVA_CONTADOR_TICKS
+    
+    # Chegou a 1 segundo - sinaliza tick do cronômetro e zera contador
+    mov     r9, r0                  # Zera contador
+    movia   r10, CRONOMETRO_TICK_FLAG
+    movi    r8, 1
+    stw     r8, (r10)
+    
+SALVA_CONTADOR_TICKS:
+    movia   r8, CRONOMETRO_CONTADOR_TICKS
+    stw     r9, (r8)
+    
+    # Sinaliza tick da animação sempre
     movia   r8, TIMER_TICK_FLAG
     movi    r9, 1
     stw     r9, (r8)
     br      ISR_EXIT_FIX
 
-TICK_CRONOMETRO_ATIVO:
-    # Cronômetro está ativo - seta flag do cronômetro
-    movia   r8, CRONOMETRO_TICK_FLAG
+APENAS_ANIMACAO:
+    # Apenas animação ativa
+    movia   r8, TIMER_TICK_FLAG
     movi    r9, 1
     stw     r9, (r8)
 
@@ -120,4 +155,9 @@ CRONOMETRO_PAUSADO:
 
 .global CRONOMETRO_ATIVO
 CRONOMETRO_ATIVO:
+    .word 0
+
+# Contador de ticks para cronômetro (quando animação também ativa)
+.global CRONOMETRO_CONTADOR_TICKS
+CRONOMETRO_CONTADOR_TICKS:
     .word 0

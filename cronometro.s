@@ -13,6 +13,8 @@
 .extern CRONOMETRO_PAUSADO
 .extern CRONOMETRO_ATIVO
 .extern CRONOMETRO_TICK_FLAG
+.extern ANIMATION_STATE
+.extern CRONOMETRO_CONTADOR_TICKS
 
 #========================================================================================================================================
 # Definições e Constantes
@@ -23,6 +25,7 @@
 
 # Configurações de timing
 .equ CRONOMETRO_PERIODO,    50000000        # 1s a 50MHz (50M ciclos)
+.equ ANIMACAO_PERIODO,       20000000        # 200ms a 50MHz (20M ciclos)
 
 # Limites do cronômetro
 .equ CRONOMETRO_MAX,        5999            # 99:59 (99*60 + 59 = 5999 segundos)
@@ -253,9 +256,24 @@ CONFIGURAR_TIMER_CRONOMETRO:
     # Para timer primeiro (segurança)
     stwio       r0, 4(r16)              # Control = 0
     
-    # Configura período (1s = 50M ciclos a 50MHz)
-    movia       r17, CRONOMETRO_PERIODO
+    # Verifica se animação está ativa para escolher período
+    movia       r1, ANIMATION_STATE
+    ldw         r2, (r1)
+    bne         r2, r0, USAR_PERIODO_ANIMACAO
     
+    # Apenas cronômetro - usa período de 1s
+    movia       r17, CRONOMETRO_PERIODO
+    br          CONFIGURAR_PERIODO
+    
+USAR_PERIODO_ANIMACAO:
+    # Animação ativa - usa período de 200ms (animação)
+    movia       r17, ANIMACAO_PERIODO
+    
+    # Zera contador de ticks do cronômetro
+    movia       r1, CRONOMETRO_CONTADOR_TICKS
+    stw         r0, (r1)
+    
+CONFIGURAR_PERIODO:
     # Bits baixos do período
     andi        r1, r17, 0xFFFF
     stwio       r1, 8(r16)              # periodl
