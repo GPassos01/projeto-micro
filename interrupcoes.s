@@ -1,4 +1,4 @@
-.set noat
+.org 0x20
 
 .global INTERRUPCAO_HANDLER
 
@@ -9,8 +9,6 @@
 
 # O VETOR DE EXCEÇÕES FOI MOVIDO PARA O ARQUIVO 'vetores.s'
 # Este arquivo agora contém apenas a lógica da ISR e variáveis.
-
-.section .text
 
 # Rotina de tratamento de exceções - VERSÃO MINIMALISTA E ROBUSTA
 INTERRUPCAO_HANDLER:
