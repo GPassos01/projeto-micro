@@ -20,6 +20,9 @@ _animacao:
 
     # Se não for '0', assume que é para parar.
 PARAR_ANIMACAO:
+    # Para o timer para evitar interferência com UART
+    call        PARAR_TIMER_ANIMACAO
+    
     # Zera a flag de interrupção para parar de chamar a lógica da animação.
     movia       r10, FLAG_INTERRUPCAO
     stw         r0, (r10)
@@ -65,6 +68,9 @@ SALVAR_ESTADO_INICIAL:
     movia       r12, LED_BASE
     stwio       r11, (r12)        # Acende LED inicial
 
+    # Inicia timer especificamente para animação
+    call        INICIALIZAR_TIMER_ANIMACAO
+    
     # Define a flag para 1, ativando a animação na ISR do timer.
     movia		r10, FLAG_INTERRUPCAO
     movi		r11, 1
@@ -72,3 +78,41 @@ SALVAR_ESTADO_INICIAL:
 
 FIM_ANIMACAO:
     ret
+
+#========================================================================================================================================
+# Funções de Controle do Timer para Animação
+#========================================================================================================================================
+INICIALIZAR_TIMER_ANIMACAO:
+    # Configura timer específico para animação (200ms)
+    movia       r8, TIMER_BASE
+    movia       r9, 10000000      # 200ms em 50MHz (10M ciclos)
+
+    # Escreve os 16 bits inferiores do período
+    andi        r10, r9, 0xFFFF
+    stwio       r10, 8(r8)
+
+    # Escreve os 16 bits superiores do período
+    srli        r9, r9, 16
+    stwio       r9, 12(r8)
+
+    # Configura e inicia o timer: START=1, CONT=1, ITO=1
+    movi        r9, 0b111
+    stwio       r9, 4(r8)
+
+    # Habilita interrupções
+    movi        r15, 0b1
+    wrctl       ienable, r15
+    wrctl       status, r15
+    ret
+
+PARAR_TIMER_ANIMACAO:
+    # Para o timer e desabilita interrupções
+    movia       r8, TIMER_BASE
+    stwio       r0, 4(r8)         # Para o timer (START=0)
+    
+    # Desabilita interrupções para evitar conflito com UART
+    wrctl       ienable, r0
+    wrctl       status, r0
+    ret
+
+.equ TIMER_BASE,    0x10002000

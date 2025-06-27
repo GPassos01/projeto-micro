@@ -61,13 +61,16 @@ _start:
     # O vetor de exceções está configurado no endereço 0x20.
     # A rotina INTERRUPCAO_HANDLER será chamada através do EXCEPTION_ENTRY.
 
-    # Habilita o timer para interrupções (animação e cronômetro)
-    call        INICIALIZAR_INTERRUPCAO_TEMPORIZADOR
+    # Timer será inicializado apenas quando necessário (animação/cronômetro)
+    # call        INICIALIZAR_INTERRUPCAO_TEMPORIZADOR
 
 #========================================================================================================================================
 # Loop Principal: Imprimir Prompt, Ler e Processar Comando
 #========================================================================================================================================
 MAIN_LOOP:
+    # Limpa o buffer antes de cada iteração para garantir entrada limpa
+    call        LIMPAR_BUFFER
+    
     # --- 1. Imprime a mensagem de prompt na UART ---
     movia       r8, JTAG_UART_BASE      # r8 aponta para a base da JTAG UART
     movia       r9, MSG_PROMPT          # r9 aponta para o início da string do prompt
