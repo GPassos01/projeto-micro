@@ -331,7 +331,11 @@ STORE_SECONDS:
     stw         r17, (r16)
     
     # Atualiza displays
-    call        ATUALIZAR_DISPLAY_CRONOMETRO
+    # call        ATUALIZAR_DISPLAY_CRONOMETRO
+    
+    # === TESTE DE DISPLAY ===
+    # Força exibição de "01:23" para teste
+    call        TESTE_DISPLAY_CRONOMETRO
     
 TICK_CRONO_EXIT:
     # --- Stack Frame Epilogue (CRÍTICO!) ---
@@ -342,70 +346,111 @@ TICK_CRONO_EXIT:
     ret
 
 #========================================================================================================================================
+# TESTE DE DISPLAY DO CRONÔMETRO (FORÇAR 01:23)
+#========================================================================================================================================
+TESTE_DISPLAY_CRONOMETRO:
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 12
+    stw         ra, 8(sp)
+    stw         r16, 4(sp)
+    stw         r17, 0(sp)
+    
+    movia       r16, HEX_BASE
+    
+    # Força HEX3 = 0 (dezenas de minutos)
+    mov         r4, r0                   # Dígito 0
+    call        CODIFICAR_7SEG
+    stwio       r2, 12(r16)              # HEX3
+    
+    # Força HEX2 = 1 (unidades de minutos)
+    movi        r4, 1                    # Dígito 1
+    call        CODIFICAR_7SEG
+    stwio       r2, 8(r16)               # HEX2
+    
+    # Força HEX1 = 2 (dezenas de segundos)
+    movi        r4, 2                    # Dígito 2
+    call        CODIFICAR_7SEG
+    stwio       r2, 4(r16)               # HEX1
+    
+    # Força HEX0 = 3 (unidades de segundos)
+    movi        r4, 3                    # Dígito 3
+    call        CODIFICAR_7SEG
+    stwio       r2, 0(r16)               # HEX0
+    
+    # --- Stack Frame Epilogue ---
+    ldw         r17, 0(sp)
+    ldw         r16, 4(sp)
+    ldw         ra, 8(sp)
+    addi        sp, sp, 12
+    ret
+
+#========================================================================================================================================
 # ATUALIZAÇÃO DE DISPLAY DO CRONÔMETRO
 #========================================================================================================================================
 ATUALIZAR_DISPLAY_CRONOMETRO:
     # --- Stack Frame Prologue ---
-    subi        sp, sp, 20
-    stw         ra, 16(sp)
-    stw         r16, 12(sp)              # Segundos totais
-    stw         r17, 8(sp)               # Minutos
-    stw         r18, 4(sp)               # Segundos
-    stw         r19, 0(sp)               # Dígito atual
+    subi        sp, sp, 24
+    stw         ra, 20(sp)
+    stw         r16, 16(sp)              # Segundos totais
+    stw         r17, 12(sp)              # Minutos calculados
+    stw         r18, 8(sp)               # Segundos restantes
+    stw         r19, 4(sp)               # Registrador temp para cálculos
+    stw         r20, 0(sp)               # Base dos displays
     
-    # Carrega segundos totais
+    # Carrega segundos totais do cronômetro
     movia       r1, CRONOMETRO_SEGUNDOS
     ldw         r16, (r1)
     
-    # Calcula minutos e segundos
+    # Base dos displays
+    movia       r20, HEX_BASE
+    
+    # === CÁLCULO CORRETO: MINUTOS E SEGUNDOS ===
+    # Minutos = segundos_totais / 60
     movi        r1, 60
-    div         r17, r16, r1             # Minutos
-    mul         r2, r17, r1
-    sub         r18, r16, r2             # Segundos restantes
+    div         r17, r16, r1             # r17 = minutos
     
-    # Display HEX3 (dezenas de minutos)
+    # Segundos restantes = segundos_totais % 60  
+    mul         r1, r17, r1              # r1 = minutos * 60
+    sub         r18, r16, r1             # r18 = segundos restantes
+    
+    # === HEX3: DEZENAS DE MINUTOS ===
     movi        r1, 10
-    div         r19, r17, r1
+    div         r19, r17, r1             # r19 = dezenas_minutos
+    mov         r4, r19                  # Argumento para CODIFICAR_7SEG
+    call        CODIFICAR_7SEG
+    stwio       r2, 12(r20)              # Escreve em HEX3
+    
+    # === HEX2: UNIDADES DE MINUTOS ===
+    movi        r1, 10
+    mul         r19, r19, r1             # r19 = dezenas_minutos * 10
+    sub         r19, r17, r19            # r19 = unidades_minutos
     mov         r4, r19
     call        CODIFICAR_7SEG
-    movia       r1, HEX_BASE
-    stwio       r2, 12(r1)               # HEX3
+    stwio       r2, 8(r20)               # Escreve em HEX2
     
-    # Display HEX2 (unidades de minutos)
+    # === HEX1: DEZENAS DE SEGUNDOS ===
     movi        r1, 10
-    div         r2, r17, r1
-    mul         r2, r2, r1
-    sub         r19, r17, r2
+    div         r19, r18, r1             # r19 = dezenas_segundos
     mov         r4, r19
     call        CODIFICAR_7SEG
-    movia       r1, HEX_BASE
-    stwio       r2, 8(r1)                # HEX2
+    stwio       r2, 4(r20)               # Escreve em HEX1
     
-    # Display HEX1 (dezenas de segundos)
+    # === HEX0: UNIDADES DE SEGUNDOS ===
     movi        r1, 10
-    div         r19, r18, r1
+    mul         r19, r19, r1             # r19 = dezenas_segundos * 10
+    sub         r19, r18, r19            # r19 = unidades_segundos
     mov         r4, r19
     call        CODIFICAR_7SEG
-    movia       r1, HEX_BASE
-    stwio       r2, 4(r1)                # HEX1
-    
-    # Display HEX0 (unidades de segundos)
-    movi        r1, 10
-    div         r2, r18, r1
-    mul         r2, r2, r1
-    sub         r19, r18, r2
-    mov         r4, r19
-    call        CODIFICAR_7SEG
-    movia       r1, HEX_BASE
-    stwio       r2, 0(r1)                # HEX0
+    stwio       r2, 0(r20)               # Escreve em HEX0
     
     # --- Stack Frame Epilogue ---
-    ldw         r19, 0(sp)
-    ldw         r18, 4(sp)
-    ldw         r17, 8(sp)
-    ldw         r16, 12(sp)
-    ldw         ra, 16(sp)
-    addi        sp, sp, 20
+    ldw         r20, 0(sp)
+    ldw         r19, 4(sp)
+    ldw         r18, 8(sp)
+    ldw         r17, 12(sp)
+    ldw         r16, 16(sp)
+    ldw         ra, 20(sp)
+    addi        sp, sp, 24
     ret
 
 #========================================================================================================================================
@@ -497,6 +542,9 @@ MSG_CRONOMETRO_INICIADO:
 
 MSG_CRONOMETRO_CANCELADO:
     .asciz "Cronometro cancelado!\n"
+
+MSG_DEBUG_TEMPO:
+    .asciz "Tempo: %d segundos\n"
 
 # Declarações externas
 .global INTERRUPCAO_HANDLER
