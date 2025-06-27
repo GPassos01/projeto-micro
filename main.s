@@ -444,57 +444,6 @@ LIMPAR_LOOP:
     ret
 
 #========================================================================================================================================
-# Seção de Dados - ABI ALIGNED
-#========================================================================================================================================
-.section .data
-.align 4
-
-# Estado global dos LEDs
-.global LED_STATE
-LED_STATE:
-    .word 0
-
-# Buffer para entrada do usuário
-.global BUFFER_ENTRADA  
-BUFFER_ENTRADA:
-    .skip 100
-
-# Ponteiro para a posição atual no buffer de entrada
-.global BUFFER_ENTRADA_POS
-BUFFER_ENTRADA_POS:
-    .word 0
-
-# Flag para debounce do KEY1
-.global KEY1_PRESSIONADO_FLAG
-KEY1_PRESSIONADO_FLAG:
-    .word 0
-
-# Tabela de codificação para displays 7-segmentos
-.global TABELA_7SEG
-TABELA_7SEG:
-    .word 0x3F    # 0
-    .word 0x06    # 1
-    .word 0x5B    # 2
-    .word 0x4F    # 3
-    .word 0x66    # 4
-    .word 0x6D    # 5
-    .word 0x7D    # 6
-    .word 0x07    # 7
-    .word 0x7F    # 8
-    .word 0x6F    # 9
-
-# Strings do sistema
-MSG_PROMPT:
-    .asciz "Entre com o comando: "
-
-# Declarações externas
-.global INTERRUPCAO_HANDLER
-.extern _led
-.extern _animacao  
-.extern _cronometro
-.extern _update_animation_step
-
-#========================================================================================================================================
 # NOVA ROTINA DE POLLING DOS BOTÕES
 #========================================================================================================================================
 PROCESSAR_BOTOES:
@@ -551,5 +500,56 @@ BOTAO_AINDA_PRESSIONADO:
     ldw         ra, 8(sp)
     addi        sp, sp, 12
     ret
+
+#========================================================================================================================================
+# Seção de Dados - ABI ALIGNED
+#========================================================================================================================================
+.section .data
+.align 4
+
+# Estado global dos LEDs
+.global LED_STATE
+LED_STATE:
+    .word 0
+
+# Buffer para entrada do usuário
+.global BUFFER_ENTRADA  
+BUFFER_ENTRADA:
+    .skip 100
+
+# Ponteiro para a posição atual no buffer de entrada
+.global BUFFER_ENTRADA_POS
+BUFFER_ENTRADA_POS:
+    .word 0
+
+# Flag para debounce do KEY1
+.global KEY1_PRESSIONADO_FLAG
+KEY1_PRESSIONADO_FLAG:
+    .word 0
+
+# Tabela de codificação para displays 7-segmentos
+.global TABELA_7SEG
+TABELA_7SEG:
+    .word 0x3F    # 0
+    .word 0x06    # 1
+    .word 0x5B    # 2
+    .word 0x4F    # 3
+    .word 0x66    # 4
+    .word 0x6D    # 5
+    .word 0x7D    # 6
+    .word 0x07    # 7
+    .word 0x7F    # 8
+    .word 0x6F    # 9
+
+# Strings do sistema
+MSG_PROMPT:
+    .asciz "Entre com o comando: "
+
+# Declarações externas
+.global INTERRUPCAO_HANDLER
+.extern _led
+.extern _animacao  
+.extern _cronometro
+.extern _update_animation_step
 
 .end
