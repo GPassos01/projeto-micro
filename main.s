@@ -8,6 +8,18 @@
 .global _start
 
 #========================================================================================================================================
+# Vetor de Exceções - Deve estar no endereço 0x20
+#========================================================================================================================================
+.section .exceptions.entry, "xa"
+.org 0x20
+EXCEPTION_ENTRY:
+    # Salto para o handler de interrupção
+    br      INTERRUPCAO_HANDLER
+
+# Retorna à seção de texto principal
+.section .text
+
+#========================================================================================================================================
 # Definição de Endereços e Constantes
 #========================================================================================================================================
 
@@ -36,8 +48,8 @@ _start:
     # A pilha cresce para baixo, então começamos do endereço mais alto.
     movia       sp, 0x07FFFFFFC
 
-    # Nota: O vetor de exceções é configurado no sistema SOPC/Platform Designer.
-    # A rotina INTERRUPCAO_HANDLER deve estar no endereço correto de exceção.
+    # O vetor de exceções está configurado no endereço 0x20.
+    # A rotina INTERRUPCAO_HANDLER será chamada através do EXCEPTION_ENTRY.
 
     # Inicializa e habilita o timer para gerar interrupções periódicas.
     call        INICIALIZAR_INTERRUPCAO_TEMPORIZADOR
