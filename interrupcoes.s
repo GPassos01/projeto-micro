@@ -12,28 +12,28 @@
 
 # Rotina de tratamento de exceções
 INTERRUPCAO_HANDLER:
-    # Salva o contexto dos registradores na pilha
-    subi    sp, sp, 128
+    # Salva o contexto mínimo necessário para ISR - Conforme Intel Documentation
+    subi    sp, sp, 76
     stw     ra, 0(sp)
-    stw     fp, 4(sp)
-    stw     r1, 8(sp)
-    stw     r2, 12(sp)
-    stw     r3, 16(sp)
-    stw     r4, 20(sp)
-    stw     r5, 24(sp)
-    stw     r6, 28(sp)
-    stw     r7, 32(sp)
-    stw     r8, 36(sp)
-    stw     r9, 40(sp)
-    stw     r10, 44(sp)
-    stw     r11, 48(sp)
-    stw     r12, 52(sp)
-    stw     r13, 56(sp)
-    stw     r14, 60(sp)
-    stw     r15, 64(sp)
-    rdctl   r16, estatus
-    stw     r16, 68(sp)
-    stw     ea, 72(sp)
+    stw     r1, 4(sp)
+    stw     r2, 8(sp)
+    stw     r3, 12(sp)
+    stw     r4, 16(sp)
+    stw     r5, 20(sp)
+    stw     r6, 24(sp)
+    stw     r7, 28(sp)
+    stw     r8, 32(sp)
+    stw     r9, 36(sp)
+    stw     r10, 40(sp)
+    stw     r11, 44(sp)
+    stw     r12, 48(sp)
+    stw     r13, 52(sp)
+    stw     r14, 56(sp)
+    stw     r15, 60(sp)
+    # Salva ea e estatus por último
+    stw     ea, 64(sp)
+    rdctl   r15, estatus
+    stw     r15, 68(sp)
 
 
     rdctl		et, ipending                    # Verifica se houve interrupcao externa
@@ -63,37 +63,36 @@ OTHER_EXCEPTIONS:
     br          END_HANDLER
 
 END_HANDLER:
-    # Restaura o contexto da pilha
-    ldw     r16, 68(sp)
-    wrctl   estatus, r16
-    ldw     ea, 72(sp)
+    # Restaura o contexto na ordem inversa - Conforme Intel Documentation
+    ldw     r15, 68(sp)
+    wrctl   estatus, r15
+    ldw     ea, 64(sp)
+    ldw     r15, 60(sp)
+    ldw     r14, 56(sp)
+    ldw     r13, 52(sp)
+    ldw     r12, 48(sp)
+    ldw     r11, 44(sp)
+    ldw     r10, 40(sp)
+    ldw     r9, 36(sp)
+    ldw     r8, 32(sp)
+    ldw     r7, 28(sp)
+    ldw     r6, 24(sp)
+    ldw     r5, 20(sp)
+    ldw     r4, 16(sp)
+    ldw     r3, 12(sp)
+    ldw     r2, 8(sp)
+    ldw     r1, 4(sp)
     ldw     ra, 0(sp)
-    ldw     fp, 4(sp)
-    ldw     r1, 8(sp)
-    ldw     r2, 12(sp)
-    ldw     r3, 16(sp)
-    ldw     r4, 20(sp)
-    ldw     r5, 24(sp)
-    ldw     r6, 28(sp)
-    ldw     r7, 32(sp)
-    ldw     r8, 36(sp)
-    ldw     r9, 40(sp)
-    ldw     r10, 44(sp)
-    ldw     r11, 48(sp)
-    ldw     r12, 52(sp)
-    ldw     r13, 56(sp)
-    ldw     r14, 60(sp)
-    ldw     r15, 64(sp)
-    addi    sp, sp, 128
+    addi    sp, sp, 76
 
     eret
 
 # ISR do Timer
 TIMER_ISR:
-    # Limpa o flag de interrupção do timer escrevendo 1 no bit TO do registrador de status
+    # IMPORTANTE: Limpa PRIMEIRO o flag de interrupção do timer
     movia   r13, TIMER_BASE
-    movi    r14, 1
-    stwio   r14, 0(r13)
+    movi    r14, 1              # Bit TO = 1 para limpar
+    stwio   r14, 0(r13)         # Limpa no status register (offset 0)
 
     # Lógica da ISR do Timer
     movia   r14, FLAG_INTERRUPCAO
@@ -151,8 +150,10 @@ TRATAR_CRONOMETRO:
     br FIM_TIMER_ISR
 
 FIM_TIMER_ISR:
-    movia r13, TIMER_BASE
-    stwio r0, (r13)
+    # CORREÇÃO: Limpa apenas o flag TO (bit 0) do status register do timer
+    movia   r13, TIMER_BASE
+    movi    r14, 1              # Bit TO = 1 para limpar a interrupção
+    stwio   r14, 0(r13)         # Escreve no status register (offset 0)
     ret
 
 # ISR do Botão

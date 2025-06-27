@@ -87,32 +87,42 @@ INICIALIZAR_TIMER_ANIMACAO:
     movia       r8, TIMER_BASE
     movia       r9, 10000000      # 200ms em 50MHz (10M ciclos)
 
+    # Para o timer antes de configurar
+    stwio       r0, 4(r8)
+
     # Escreve os 16 bits inferiores do período
     andi        r10, r9, 0xFFFF
-    stwio       r10, 8(r8)
+    stwio       r10, 8(r8)        # periodl (offset 8)
 
     # Escreve os 16 bits superiores do período
     srli        r9, r9, 16
-    stwio       r9, 12(r8)
+    stwio       r9, 12(r8)        # periodh (offset 12)
 
-    # Configura e inicia o timer: START=1, CONT=1, ITO=1
-    movi        r9, 0b111
-    stwio       r9, 4(r8)
+    # Limpa qualquer interrupção pendente
+    movi        r9, 1
+    stwio       r9, 0(r8)         # Limpa TO bit
 
-    # Habilita interrupções
+    # Habilita interrupções do timer PRIMEIRO
     movi        r15, 0b1
-    wrctl       ienable, r15
-    wrctl       status, r15
+    wrctl       ienable, r15      # Habilita IRQ0 (timer)
+    wrctl       status, r15       # Habilita interrupções globalmente
+
+    # Inicia o timer: START=1, CONT=1, ITO=1
+    movi        r9, 0b111
+    stwio       r9, 4(r8)         # control register (offset 4)
     ret
 
 PARAR_TIMER_ANIMACAO:
-    # Para o timer e desabilita interrupções
+    # Para APENAS o timer (sem desabilitar interrupções globais)
     movia       r8, TIMER_BASE
-    stwio       r0, 4(r8)         # Para o timer (START=0)
     
-    # Desabilita interrupções para evitar conflito com UART
-    wrctl       ienable, r0
-    wrctl       status, r0
+    # Limpa o flag de interrupção primeiro
+    movi        r9, 1
+    stwio       r9, 0(r8)         # Limpa TO bit
+    
+    # Para o timer preservando as configurações de período
+    movi        r9, 0b000         # START=0, CONT=0, ITO=0  
+    stwio       r9, 4(r8)         # Para o timer
     ret
 
 .equ TIMER_BASE,    0x10002000
