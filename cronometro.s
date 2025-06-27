@@ -79,6 +79,9 @@ INICIAR_CRONOMETRO:
     ldw         r2, (r1)
     bne         r2, r0, CRONOMETRO_JA_ATIVO
     
+    # PARA QUALQUER TIMER ATIVO PRIMEIRO (CRÍTICO!)
+    call        PARAR_TIMER_SISTEMA
+    
     # Inicializa estado do cronômetro
     call        INICIALIZAR_ESTADO_CRONOMETRO
     
@@ -93,6 +96,10 @@ INICIAR_CRONOMETRO:
     movi        r2, 1
     stw         r2, (r1)
     
+    # Mensagem de confirmação
+    movia       r4, MSG_CRONOMETRO_INICIADO
+    call        IMPRIMIR_STRING
+    
     # Atualiza display inicial
     call        ATUALIZAR_DISPLAY_CRONOMETRO
     
@@ -100,7 +107,7 @@ INICIAR_CRONOMETRO:
 
 CANCELAR_CRONOMETRO:
     # Para timer do cronômetro
-    call        PARAR_TIMER_CRONOMETRO
+    call        PARAR_TIMER_SISTEMA
     
     # Desativa cronômetro
     movia       r1, CRONOMETRO_ATIVO
@@ -116,7 +123,11 @@ CANCELAR_CRONOMETRO:
     
     # Limpa displays
     call        LIMPAR_DISPLAYS
-
+    
+    # Mensagem de confirmação
+    movia       r4, MSG_CRONOMETRO_CANCELADO
+    call        IMPRIMIR_STRING
+    
 CRONOMETRO_JA_ATIVO:
     # Cronômetro já estava ativo, não faz nada
     
@@ -193,6 +204,39 @@ INICIALIZAR_ESTADO_CRONOMETRO:
 #========================================================================================================================================
 # FUNÇÕES DE TIMER - ABI COMPLIANT
 #========================================================================================================================================
+
+#------------------------------------------------------------------------
+# Para o timer do sistema de forma robusta (para prevenir conflitos)
+#------------------------------------------------------------------------
+PARAR_TIMER_SISTEMA:
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 8
+    stw         ra, 4(sp)
+    stw         r16, 0(sp)
+    
+    movia       r16, TIMER_BASE
+    
+    # Para timer primeiro
+    stwio       r0, 4(r16)              # control = 0
+    
+    # Limpa flag de timeout
+    movi        r1, 1
+    stwio       r1, 0(r16)              # status = 1
+    
+    # Desabilita interrupções do timer temporariamente
+    wrctl       ienable, r0             # Desabilita todas IRQs
+    
+    # Pequeno delay para garantir que timer parou
+    movi        r1, 1000
+DELAY_PARAR:
+    subi        r1, r1, 1
+    bne         r1, r0, DELAY_PARAR
+    
+    # --- Stack Frame Epilogue ---
+    ldw         r16, 0(sp)
+    ldw         ra, 4(sp)
+    addi        sp, sp, 8
+    ret
 
 #------------------------------------------------------------------------
 # Configura e inicia timer para cronômetro
@@ -417,6 +461,11 @@ CONFIGURAR_KEY1_INTERRUPCAO:
     ldw         ra, 0(sp)
     addi        sp, sp, 4
     ret
-
 # Referência para tabela 7-segmentos definida em main.s
 .extern TABELA_7SEG
+
+# Referências para funções e mensagens do main.s
+.extern IMPRIMIR_STRING
+.extern MSG_CRONOMETRO_INICIADO
+.extern MSG_CRONOMETRO_CANCELADO
+

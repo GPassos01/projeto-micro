@@ -114,17 +114,19 @@ PROCESSAR_TICKS_SISTEMA:
     ldw         r17, (r16)
     beq         r17, r0, CHECK_CRONOMETRO_TICK_FIX
     
-    # CORRIGIDO: Limpa a flag e chama a função de atualização correta
+    # Limpa a flag e chama a função de atualização correta
     stw         r0, (r16)
     call        _update_animation_step
+    # Se animação processada, NÃO processa cronômetro (timer único)
+    br          TICKS_EXIT_FIX
     
 CHECK_CRONOMETRO_TICK_FIX:
-    # --- Verifica tick do cronômetro ---
+    # --- Verifica tick do cronômetro (apenas se animação não processada) ---
     movia       r16, CRONOMETRO_TICK_FLAG
     ldw         r17, (r16)
     beq         r17, r0, TICKS_EXIT_FIX
     
-    # Limpa flag e processa cronômetro (função de suporte mantida por complexidade)
+    # Limpa flag e processa cronômetro
     stw         r0, (r16)
     call        PROCESSAR_TICK_CRONOMETRO
     
@@ -478,6 +480,12 @@ TABELA_7SEG:
 # Strings do sistema
 MSG_PROMPT:
     .asciz "Entre com o comando: "
+
+MSG_CRONOMETRO_INICIADO:
+    .asciz "Cronometro iniciado!\n"
+
+MSG_CRONOMETRO_CANCELADO:
+    .asciz "Cronometro cancelado!\n"
 
 # Declarações externas
 .global INTERRUPCAO_HANDLER
