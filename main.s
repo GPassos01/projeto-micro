@@ -48,11 +48,21 @@ _start:
     # A pilha cresce para baixo, então começamos do endereço mais alto.
     movia       sp, 0x07FFFFFFC
 
+    # Inicializa os LEDs (todos apagados)
+    movia       r8, LED_BASE
+    stwio       r0, (r8)
+
+    # Limpa as variáveis de estado
+    movia       r8, LED_STATE
+    stw         r0, (r8)
+    movia       r8, FLAG_INTERRUPCAO
+    stw         r0, (r8)
+
     # O vetor de exceções está configurado no endereço 0x20.
     # A rotina INTERRUPCAO_HANDLER será chamada através do EXCEPTION_ENTRY.
 
-    # Inicializa e habilita o timer para gerar interrupções periódicas.
-    call        INICIALIZAR_INTERRUPCAO_TEMPORIZADOR
+    # TEMPORARIAMENTE DESABILITADO: Problema conhecido com UART e interrupções
+    # call        INICIALIZAR_INTERRUPCAO_TEMPORIZADOR
 
 #========================================================================================================================================
 # Loop Principal: Imprimir Prompt, Ler e Processar Comando
@@ -61,7 +71,7 @@ MAIN_LOOP:
     # --- 1. Imprime a mensagem de prompt na UART ---
     movia       r8, JTAG_UART_BASE      # r8 aponta para a base da JTAG UART
     movia       r9, MSG_PROMPT          # r9 aponta para o início da string do prompt
-    movi        r10, BUFFER_ESCRITA     # r10 aponta para o buffer onde a entrada do usuário será guardada
+    movia       r10, BUFFER_ESCRITA     # r10 aponta para o buffer onde a entrada do usuário será guardada
 
 PRINTF_LOOP:
     # Carrega o próximo caractere da mensagem.
@@ -117,8 +127,11 @@ POLLING_INPUT_LOOP:
 
 # --- 3. Processa o comando recebido ---
 FINISH_READ:
+    # Adiciona terminador nulo ao buffer
+    stb         r0, (r10)
+    
     # Carrega o primeiro caractere digitado pelo usuário.
-    movi        r9, BUFFER_ESCRITA
+    movia       r9, BUFFER_ESCRITA
     ldb         r11, (r9)
 
     # Compara com os comandos conhecidos ('0', '1', '2').
@@ -131,7 +144,8 @@ FINISH_READ:
     movi        r10, '2'        # '2' na tabela ASCII
     beq         r11, r10, CALL_CRONOMETER
 
-    # Se o comando for desconhecido, reinicia o loop principal.
+    # Se o comando for desconhecido, limpa o buffer e reinicia o loop principal.
+    call        LIMPAR_BUFFER
     br          MAIN_LOOP
 
 #========================================================================================================================================
@@ -140,15 +154,31 @@ FINISH_READ:
 
 CALL_LED:
     call        _led
+    call        LIMPAR_BUFFER
     br          MAIN_LOOP
 
 CALL_ANIMATION:
     call        _animacao
+    call        LIMPAR_BUFFER
     br          MAIN_LOOP
 
 CALL_CRONOMETER:
     call        _cronometro
+    call        LIMPAR_BUFFER
     br          MAIN_LOOP
+
+#========================================================================================================================================
+# Rotina para Limpar o Buffer
+#========================================================================================================================================
+LIMPAR_BUFFER:
+    movia       r8, BUFFER_ESCRITA
+    movi        r9, 100              # Tamanho do buffer
+LIMPAR_LOOP:
+    stb         r0, (r8)            # Escreve 0 na posição atual
+    addi        r8, r8, 1           # Avança para próxima posição
+    subi        r9, r9, 1           # Decrementa contador
+    bne         r9, r0, LIMPAR_LOOP # Continua se não zerou
+    ret
 
 #========================================================================================================================================
 # Rotina de Inicialização do Timer
@@ -206,7 +236,7 @@ FLAG_INTERRUPCAO:
 # Variável para guardar o estado da animação dos LEDs.
 .global ANIMATION_STATE
 ANIMATION_STATE:
-    .word 0x01
+    .word 0x00
 
 # Buffer para armazenar a entrada do usuário.
 BUFFER_ESCRITA:

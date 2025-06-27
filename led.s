@@ -3,6 +3,9 @@
 # Referência para símbolo global definido em main.s
 .extern LED_STATE
 
+# Definição de constante
+.equ LED_BASE, 0x10000000
+
 _led:
     addi        r9,     r9,  1 #0p 00
     
@@ -27,8 +30,12 @@ _led:
     subi        r11,    r11, 0x30 #unidade
 
     add         r14,    r14, r11 #x = [dezena][unidade]   
-    ###
-
+    
+    # Valida se o LED está na faixa válida (0-17)
+    movi        r12, 17
+    bgt         r14, r12, FIM_LED   # Se LED > 17, sai sem fazer nada
+    blt         r14, r0, FIM_LED    # Se LED < 0, sai sem fazer nada
+    
     movi        r12, 1
     sll         r14,    r12, r14 #posicao do led a apagar/acender
 
@@ -50,7 +57,7 @@ ACENDER_LED:
 
 
 ATUALIZAR_LED:
-    movia       r11,    0x10000000 #Endereço base LED's
+    movia       r11,    LED_BASE    # Usa constante definida
     stwio       r16,    (r11)       # escreve nos LEDs
     stw		    r16,    (r13)       # salva na memória estado atual
 
