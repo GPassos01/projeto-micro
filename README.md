@@ -1,7 +1,7 @@
 # 🚀 Projeto Microprocessadores - Nios II Assembly
 ## Sistema Completo de Controle para DE2-115
 
-**Autores:** Gabriel Passos e Lucas Ferrarotto  
+**Autores:** Amanda Oliveira, Gabriel Passos e Lucas Ferrarotto  
 **Semestre:** 1º Semestre 2025  
 **Placa:** DE2-115 (Cyclone IV FPGA)  
 **Processador:** Nios II/e (Basic)  
@@ -502,8 +502,9 @@ movia sp, 0x2000        # ❌ Muito baixo
 
 ## 👥 Contribuidores
 
-**Gabriel Passos** - Desenvolvimento principal, arquitetura do sistema  
-**Lucas Ferrarotto** - Implementação, testes, documentação
+**Gabriel Passos**  
+**Lucas Ferrarotto**
+**Amanda Oliveira**
 
 ---
 
