@@ -2,7 +2,7 @@
 # PROJETO MICROPROCESSADORES - NIOS II ASSEMBLY
 # Arquivo: cronometro.s
 # Descrição: Sistema de Cronômetro Digital MM:SS com Displays 7-Segmentos
-# ABI Compliant: ✅ 100% - Seguindo convenções rigorosas da ABI Nios II
+# ABI Compliant: 100% - Seguindo convenções rigorosas da ABI Nios II
 #
 # FUNCIONALIDADES PRINCIPAIS:
 # - Cronômetro digital formato MM:SS (00:00 até 99:59)
@@ -23,7 +23,7 @@
 # - HEX1: Dezenas de segundos (0-5)
 # - HEX0: Unidades de segundos (0-9)
 #
-# AUTORES: Gabriel Passos e Lucas Ferrarotto - 1º Semestre 2025
+# AUTORES: Amanda Oliveira, Gabriel Passos e Lucas Ferrarotto - 1º Semestre 2025
 #========================================================================================================================================
 
 .global _cronometro
