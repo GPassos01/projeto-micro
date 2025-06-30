@@ -3,7 +3,7 @@
 ## ✅ **STATUS: PROJETO 100% REVISADO E OTIMIZADO**
 
 **Data da Revisão:** Janeiro 2025  
-**Autores:** Gabriel Passos e Lucas Ferrarotto  
+**Autores:** Gabriel Passos e IA  
 **Placa:** DE2-115 (Cyclone IV FPGA)  
 **Processador:** Nios II/e (Basic)  
 
