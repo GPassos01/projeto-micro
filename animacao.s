@@ -172,12 +172,13 @@ FIM_ANIMACAO:
 #========================================================================================================================================
 _update_animation_step:
     # --- Stack Frame Prologue ---
-    subi        sp, sp, 20
-    stw         fp, 16(sp)
-    stw         ra, 12(sp)
-    stw         r16, 8(sp)              # Estado atual
-    stw         r17, 4(sp)              # Direção
-    stw         r18, 0(sp)              # Temp
+    subi        sp, sp, 24
+    stw         fp, 20(sp)
+    stw         ra, 16(sp)
+    stw         r16, 12(sp)             # Estado atual
+    stw         r17, 8(sp)              # Direção
+    stw         r18, 4(sp)              # Temp
+    stw         r19, 0(sp)              # Temp para endereços
     
     mov         fp, sp
     
@@ -204,28 +205,29 @@ MOVER_DIREITA_ESQUERDA:
 MOVER_ESQUERDA_DIREITA:
     # Move da esquerda para direita (LED 0→1→...→17→0)
     slli        r16, r16, 1             # Desloca bit para esquerda
-    movia       r18, LED_OVERFLOW_MASK  # 2^18 (overflow)
-    bne         r16, r18, ATUALIZAR_LEDS_ANIM
+    movia       r19, LED_OVERFLOW_MASK  # 2^18 (overflow) - usando r19 para evitar conflito
+    bne         r16, r19, ATUALIZAR_LEDS_ANIM
     
     # Se passou do LED 17, volta para LED 0
     movia       r16, LED_0_MASK         # 2^0 = LED 0
     
 ATUALIZAR_LEDS_ANIM:
     # Salva novo estado
-    movia       r18, ANIMATION_STATE
-    stw         r16, (r18)
+    movia       r19, ANIMATION_STATE    # Usando r19 para evitar conflito
+    stw         r16, (r19)
     
     # Atualiza LEDs físicos
-    movia       r18, LED_BASE
-    stwio       r16, (r18)
+    movia       r19, LED_BASE           # Usando r19 para evitar conflito
+    stwio       r16, (r19)
     
     # --- Stack Frame Epilogue ---
-    ldw         r18, 0(fp)
-    ldw         r17, 4(fp)
-    ldw         r16, 8(fp)
-    ldw         ra, 12(fp)
-    ldw         fp, 16(fp)
-    addi        sp, sp, 20
+    ldw         r19, 0(fp)
+    ldw         r18, 4(fp)
+    ldw         r17, 8(fp)
+    ldw         r16, 12(fp)
+    ldw         ra, 16(fp)
+    ldw         fp, 20(fp)
+    addi        sp, sp, 24
     ret
 
 #========================================================================================================================================
