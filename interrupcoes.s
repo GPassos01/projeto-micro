@@ -2,7 +2,7 @@
 # PROJETO MICROPROCESSADORES - NIOS II ASSEMBLY
 # Arquivo: interrupcoes.s
 # Descrição: Sistema de Interrupções e Variáveis Globais do Sistema
-# ABI Compliant: ✅ Totalmente - Seguindo convenções rigorosas da ABI Nios II
+# ABI Compliant: Totalmente - Seguindo convenções rigorosas da ABI Nios II
 # 
 # FUNCIONALIDADES:
 # - Rotina de Serviço de Interrupção (ISR) otimizada e robusta
@@ -11,7 +11,7 @@
 # - Contagem de ticks sincronizada para cronômetro quando ambos sistemas ativos
 # - Variáveis globais centralizadas e alinhadas para performance
 #
-# AUTORES: Gabriel Passos e Lucas Ferrarotto - 1º Semestre 2025
+# AUTORES: Amanda Oliveira, Gabriel Passos e Lucas Ferrarotto - 1º Semestre 2025
 # PLACA: DE2-115 (Cyclone IV FPGA)
 #========================================================================================================================================
 
