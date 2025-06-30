@@ -166,11 +166,13 @@ TICKS_EXIT_FIX:
 IMPRIMIR_STRING:
     # --- Stack Frame Prologue ---
     # r4 = ponteiro para string (argumento 1 conforme ABI)
-    subi        sp, sp, 16
-    stw         ra, 12(sp)
-    stw         r16, 8(sp)               # String pointer
-    stw         r17, 4(sp)               # UART base
-    stw         r18, 0(sp)               # Char atual
+    subi        sp, sp, 24
+    stw         ra, 20(sp)
+    stw         r16, 16(sp)              # String pointer
+    stw         r17, 12(sp)              # UART base
+    stw         r18, 8(sp)               # Char atual
+    stw         r19, 4(sp)               # Status temp
+    stw         r20, 0(sp)               # UART control temp
     
     mov         r16, r4                  # Copia argumento para callee-saved
     movia       r17, JTAG_UART_BASE
@@ -182,32 +184,34 @@ PRINT_LOOP:
     
 WAIT_UART_READY:
     # Polling UART robusto com seções críticas
-    rdctl       r1, status               # Salva status (usando caller-saved)
+    rdctl       r19, status              # Salva status (usando callee-saved)
     wrctl       status, r0               # Desabilita interrupções
     
-    ldwio       r2, UART_CONTROL(r17)    # Lê controle UART
+    ldwio       r20, UART_CONTROL(r17)   # Lê controle UART
     
-    wrctl       status, r1               # Restaura interrupções
+    wrctl       status, r19              # Restaura interrupções
     
-    andhi       r2, r2, 0xFFFF           # Verifica WSPACE
-    beq         r2, r0, WAIT_UART_READY  # Se buffer cheio, espera
+    andhi       r20, r20, 0xFFFF         # Verifica WSPACE
+    beq         r20, r0, WAIT_UART_READY # Se buffer cheio, espera
     
     # Escreve caractere atomicamente
-    rdctl       r1, status
+    rdctl       r19, status
     wrctl       status, r0
     stwio       r18, UART_DATA(r17)
-    wrctl       status, r1
+    wrctl       status, r19
     
     addi        r16, r16, 1              # Próximo caractere
     br          PRINT_LOOP
     
 PRINT_EXIT:
     # --- Stack Frame Epilogue ---
-    ldw         r18, 0(sp)
-    ldw         r17, 4(sp)
-    ldw         r16, 8(sp)
-    ldw         ra, 12(sp)
-    addi        sp, sp, 16
+    ldw         r20, 0(sp)
+    ldw         r19, 4(sp)
+    ldw         r18, 8(sp)
+    ldw         r17, 12(sp)
+    ldw         r16, 16(sp)
+    ldw         ra, 20(sp)
+    addi        sp, sp, 24
     ret
 
 #========================================================================================================================================
@@ -277,19 +281,21 @@ FIM_PROCESSA_CHAR:
 #========================================================================================================================================
 PROCESSAR_BOTOES:
     # --- Stack Frame Prologue ---
-    subi        sp, sp, 16
-    stw         ra, 12(sp)
-    stw         r16, 8(sp)               # Estado atual dos botões
-    stw         r17, 4(sp)               # Estado anterior dos botões
-    stw         r18, 0(sp)               # Botão pressionado (edge detection)
+    subi        sp, sp, 24
+    stw         ra, 20(sp)
+    stw         r16, 16(sp)              # Estado atual dos botões
+    stw         r17, 12(sp)              # Estado anterior dos botões
+    stw         r18, 8(sp)               # Botão pressionado (edge detection)
+    stw         r19, 4(sp)               # Temp para endereços
+    stw         r20, 0(sp)               # Temp para bit mask
     
     # Lê estado atual dos botões
-    movia       r1, KEY_BASE
-    ldwio       r16, (r1)               # r16 = estado atual
+    movia       r19, KEY_BASE
+    ldwio       r16, (r19)              # r16 = estado atual
     
     # Carrega estado anterior dos botões
-    movia       r1, BOTOES_ESTADO_ANTERIOR
-    ldw         r17, (r1)               # r17 = estado anterior
+    movia       r19, BOTOES_ESTADO_ANTERIOR
+    ldw         r17, (r19)              # r17 = estado anterior
     
     # Detecta bordas de descida (botão pressionado)
     # Botão pressionado = anterior era 1 e atual é 0
@@ -297,22 +303,24 @@ PROCESSAR_BOTOES:
     and         r18, r18, r17           # AND com anterior para pegar descidas
     
     # Salva estado atual como anterior para próxima iteração
-    stw         r16, (r1)
+    stw         r16, (r19)
     
     # Verifica se KEY1 foi pressionado (bit 1)
-    andi        r1, r18, 0x02           # Isola bit 1 (KEY1)
-    beq         r1, r0, BOTOES_EXIT     # Se não foi pressionado, sai
+    andi        r20, r18, 0x02          # Isola bit 1 (KEY1)
+    beq         r20, r0, BOTOES_EXIT    # Se não foi pressionado, sai
     
     # KEY1 foi pressionado - controla cronômetro
     call        PROCESSAR_KEY1_CRONOMETRO
     
 BOTOES_EXIT:
     # --- Stack Frame Epilogue ---
-    ldw         r18, 0(sp)
-    ldw         r17, 4(sp)
-    ldw         r16, 8(sp)
-    ldw         ra, 12(sp)
-    addi        sp, sp, 16
+    ldw         r20, 0(sp)
+    ldw         r19, 4(sp)
+    ldw         r18, 8(sp)
+    ldw         r17, 12(sp)
+    ldw         r16, 16(sp)
+    ldw         ra, 20(sp)
+    addi        sp, sp, 24
     ret
 
 #========================================================================================================================================
@@ -365,21 +373,22 @@ KEY1_EXIT:
 PROCESSAR_COMANDO:
     # --- Stack Frame Prologue ---
     # r4 = ponteiro para comando
-    subi        sp, sp, 12
-    stw         ra, 8(sp)
-    stw         r16, 4(sp)               # Command pointer
-    stw         r17, 0(sp)               # First char
+    subi        sp, sp, 16
+    stw         ra, 12(sp)
+    stw         r16, 8(sp)               # Command pointer
+    stw         r17, 4(sp)               # First char
+    stw         r18, 0(sp)               # Temp para comparações
     
     mov         r16, r4
     ldb         r17, (r16)               # Primeiro caractere
     
     # Compara com comandos conhecidos
-    movi        r1, '0'
-    beq         r17, r1, CMD_LED
-    movi        r1, '1'  
-    beq         r17, r1, CMD_ANIMATION
-    movi        r1, '2'
-    beq         r17, r1, CMD_CRONOMETER
+    movi        r18, '0'
+    beq         r17, r18, CMD_LED
+    movi        r18, '1'  
+    beq         r17, r18, CMD_ANIMATION
+    movi        r18, '2'
+    beq         r17, r18, CMD_CRONOMETER
     
     # Comando inválido
     br          CMD_EXIT
@@ -400,10 +409,11 @@ CMD_CRONOMETER:
     
 CMD_EXIT:
     # --- Stack Frame Epilogue ---
-    ldw         r17, 0(sp)
-    ldw         r16, 4(sp)
-    ldw         ra, 8(sp)
-    addi        sp, sp, 12
+    ldw         r18, 0(sp)
+    ldw         r17, 4(sp)
+    ldw         r16, 8(sp)
+    ldw         ra, 12(sp)
+    addi        sp, sp, 16
     ret
 
 #========================================================================================================================================
@@ -411,10 +421,11 @@ CMD_EXIT:
 #========================================================================================================================================
 PROCESSAR_TICK_CRONOMETRO:
     # --- Stack Frame Prologue (CRÍTICO!) ---
-    subi        sp, sp, 12
-    stw         ra, 8(sp)                # Salva return address
-    stw         r16, 4(sp)               # Registrador temporário
-    stw         r17, 0(sp)               # Registrador temporário
+    subi        sp, sp, 16
+    stw         ra, 12(sp)               # Salva return address
+    stw         r16, 8(sp)               # Registrador temporário
+    stw         r17, 4(sp)               # Registrador temporário
+    stw         r18, 0(sp)               # Registrador temporário
     
     # Verifica se cronômetro está ativo
     movia       r16, CRONOMETRO_ATIVO
@@ -432,8 +443,8 @@ PROCESSAR_TICK_CRONOMETRO:
     addi        r17, r17, 1
     
     # Verifica overflow (99:59 = 5999 segundos)
-    movi        r1, CRONOMETRO_MAX_SEGUNDOS
-    ble         r17, r1, STORE_SECONDS
+    movi        r18, CRONOMETRO_MAX_SEGUNDOS
+    ble         r17, r18, STORE_SECONDS
     mov         r17, r0                   # Reset para 00:00
     
 STORE_SECONDS:
@@ -444,10 +455,11 @@ STORE_SECONDS:
     
 TICK_CRONO_EXIT:
     # --- Stack Frame Epilogue (CRÍTICO!) ---
-    ldw         r17, 0(sp)               # Restaura registradores
-    ldw         r16, 4(sp)
-    ldw         ra, 8(sp)                # Restaura return address
-    addi        sp, sp, 12               # Libera stack
+    ldw         r18, 0(sp)               # Restaura registradores
+    ldw         r17, 4(sp)
+    ldw         r16, 8(sp)
+    ldw         ra, 12(sp)               # Restaura return address
+    addi        sp, sp, 16               # Libera stack
     ret
 
 #========================================================================================================================================
@@ -455,19 +467,20 @@ TICK_CRONO_EXIT:
 #========================================================================================================================================
 ATUALIZAR_DISPLAY_CRONOMETRO:
     # --- Stack Frame Prologue ---
-    subi        sp, sp, 32
-    stw         ra, 28(sp)
-    stw         r16, 24(sp)              # Segundos totais
-    stw         r17, 20(sp)              # Minutos
-    stw         r18, 16(sp)              # Segundos restantes
-    stw         r19, 12(sp)              # Valor final dos displays
-    stw         r20, 8(sp)               # Temp para cálculos
-    stw         r21, 4(sp)               # Temp para dígitos
-    stw         r22, 0(sp)               # Temp para shifts
+    subi        sp, sp, 36
+    stw         ra, 32(sp)
+    stw         r16, 28(sp)              # Segundos totais
+    stw         r17, 24(sp)              # Minutos
+    stw         r18, 20(sp)              # Segundos restantes
+    stw         r19, 16(sp)              # Valor final dos displays
+    stw         r20, 12(sp)              # Temp para cálculos
+    stw         r21, 8(sp)               # Temp para dígitos
+    stw         r22, 4(sp)               # Temp para shifts
+    stw         r23, 0(sp)               # Temp para constantes
     
     # Carrega segundos totais do cronômetro
-    movia       r1, CRONOMETRO_SEGUNDOS
-    ldw         r16, (r1)
+    movia       r23, CRONOMETRO_SEGUNDOS
+    ldw         r16, (r23)
     
     # === DIVISÃO MANUAL POR 60 PARA CALCULAR MINUTOS ===
     mov         r17, r0                  # r17 = minutos (quociente)
@@ -475,9 +488,9 @@ ATUALIZAR_DISPLAY_CRONOMETRO:
     
     # Loop: subtrai 60 até não poder mais
 DIVISAO_60_LOOP:
-    movi        r1, 60
-    blt         r18, r1, DIVISAO_60_FIM  # Se < 60, termina
-    sub         r18, r18, r1             # Subtrai 60
+    movi        r23, 60
+    blt         r18, r23, DIVISAO_60_FIM # Se < 60, termina
+    sub         r18, r18, r23            # Subtrai 60
     addi        r17, r17, 1              # Incrementa minutos
     br          DIVISAO_60_LOOP
     
@@ -490,9 +503,9 @@ DIVISAO_60_FIM:
     mov         r20, r0                  # Dezenas de minutos
     mov         r21, r17                 # Copia minutos
 DEZENAS_MIN_LOOP:
-    movi        r1, 10
-    blt         r21, r1, DEZENAS_MIN_FIM
-    sub         r21, r21, r1
+    movi        r23, 10
+    blt         r21, r23, DEZENAS_MIN_FIM
+    sub         r21, r21, r23
     addi        r20, r20, 1
     br          DEZENAS_MIN_LOOP
 DEZENAS_MIN_FIM:
@@ -511,9 +524,9 @@ DEZENAS_MIN_FIM:
     mov         r20, r0                  # Dezenas de segundos
     mov         r21, r18                 # Copia segundos restantes
 DEZENAS_SEG_LOOP:
-    movi        r1, 10
-    blt         r21, r1, DEZENAS_SEG_FIM
-    sub         r21, r21, r1
+    movi        r23, 10
+    blt         r21, r23, DEZENAS_SEG_FIM
+    sub         r21, r21, r23
     addi        r20, r20, 1
     br          DEZENAS_SEG_LOOP
 DEZENAS_SEG_FIM:
@@ -528,19 +541,20 @@ DEZENAS_SEG_FIM:
     or          r19, r19, r2
     
     # === ESCREVE NO HARDWARE ===
-    movia       r1, HEX_BASE
-    stwio       r19, (r1)               # Escreve todos os displays
+    movia       r23, HEX_BASE
+    stwio       r19, (r23)              # Escreve todos os displays
     
     # --- Stack Frame Epilogue ---
-    ldw         r22, 0(sp)
-    ldw         r21, 4(sp)
-    ldw         r20, 8(sp)
-    ldw         r19, 12(sp)
-    ldw         r18, 16(sp)
-    ldw         r17, 20(sp)
-    ldw         r16, 24(sp)
-    ldw         ra, 28(sp)
-    addi        sp, sp, 32
+    ldw         r23, 0(sp)
+    ldw         r22, 4(sp)
+    ldw         r21, 8(sp)
+    ldw         r20, 12(sp)
+    ldw         r19, 16(sp)
+    ldw         r18, 20(sp)
+    ldw         r17, 24(sp)
+    ldw         r16, 28(sp)
+    ldw         ra, 32(sp)
+    addi        sp, sp, 36
     ret
 
 #========================================================================================================================================
@@ -549,19 +563,20 @@ DEZENAS_SEG_FIM:
 CODIFICAR_7SEG:
     # r4 = dígito (0-9), retorna em r2
     # --- Stack Frame Prologue ---
-    subi        sp, sp, 8
-    stw         ra, 4(sp)
-    stw         r16, 0(sp)
+    subi        sp, sp, 12
+    stw         ra, 8(sp)
+    stw         r16, 4(sp)
+    stw         r17, 0(sp)
     
     # Validação de entrada
-    movi        r1, 9
-    bgt         r4, r1, INVALID_DIGIT
+    movi        r17, 9
+    bgt         r4, r17, INVALID_DIGIT
     blt         r4, r0, INVALID_DIGIT
     
     # Tabela de codificação 7-segmentos
     movia       r16, TABELA_7SEG
-    slli        r1, r4, 2                # Multiplica por 4 (word)
-    add         r16, r16, r1
+    slli        r17, r4, 2               # Multiplica por 4 (word)
+    add         r16, r16, r17
     ldw         r2, (r16)                # Carrega código
     br          CODIF_EXIT
     
@@ -570,9 +585,10 @@ INVALID_DIGIT:
     
 CODIF_EXIT:
     # --- Stack Frame Epilogue ---
-    ldw         r16, 0(sp)
-    ldw         ra, 4(sp)
-    addi        sp, sp, 8
+    ldw         r17, 0(sp)
+    ldw         r16, 4(sp)
+    ldw         ra, 8(sp)
+    addi        sp, sp, 12
     ret
 
 #========================================================================================================================================

@@ -74,12 +74,14 @@
 _cronometro:
     # --- Stack Frame Prologue (ABI Standard) ---
     # Salva registradores callee-saved que serão usados
-    subi        sp, sp, 20
-    stw         fp, 16(sp)              # Frame pointer (callee-saved)
-    stw         ra, 12(sp)              # Return address (callee-saved)
-    stw         r16, 8(sp)              # s0 - Command pointer (callee-saved)
-    stw         r17, 4(sp)              # s1 - Operation (callee-saved)
-    stw         r18, 0(sp)              # s2 - Spare (callee-saved)
+    subi        sp, sp, 28
+    stw         fp, 24(sp)              # Frame pointer (callee-saved)
+    stw         ra, 20(sp)              # Return address (callee-saved)
+    stw         r16, 16(sp)             # s0 - Command pointer (callee-saved)
+    stw         r17, 12(sp)             # s1 - Operation (callee-saved)
+    stw         r18, 8(sp)              # s2 - Temp 1 (callee-saved)
+    stw         r19, 4(sp)              # s3 - Temp 2 (callee-saved)
+    stw         r20, 0(sp)              # s4 - Spare (callee-saved)
     
     # Configura frame pointer conforme ABI
     mov         fp, sp
@@ -101,9 +103,9 @@ _cronometro:
 
 INICIAR_CRONOMETRO:
     # Verifica se cronômetro já está ativo
-    movia       r1, CRONOMETRO_ATIVO
-    ldw         r2, (r1)
-    bne         r2, r0, CRONOMETRO_JA_ATIVO
+    movia       r18, CRONOMETRO_ATIVO
+    ldw         r19, (r18)
+    bne         r19, r0, CRONOMETRO_JA_ATIVO
     
     # PARA QUALQUER TIMER ATIVO PRIMEIRO (CRÍTICO!)
     call        PARAR_TIMER_SISTEMA
@@ -118,9 +120,9 @@ INICIAR_CRONOMETRO:
     call        CONFIGURAR_KEY1_INTERRUPCAO
     
     # Ativa cronômetro
-    movia       r1, CRONOMETRO_ATIVO
-    movi        r2, 1
-    stw         r2, (r1)
+    movia       r18, CRONOMETRO_ATIVO
+    movi        r19, 1
+    stw         r19, (r18)
     
     # Mensagem de confirmação
     movia       r4, MSG_CRONOMETRO_INICIADO
@@ -133,9 +135,9 @@ INICIAR_CRONOMETRO:
 
 CANCELAR_CRONOMETRO:
     # Verifica se animação está ativa antes de parar timer
-    movia       r1, FLAG_INTERRUPCAO
-    ldw         r2, (r1)
-    bne         r2, r0, CANCELAR_APENAS_CRONOMETRO
+    movia       r18, FLAG_INTERRUPCAO
+    ldw         r19, (r18)
+    bne         r19, r0, CANCELAR_APENAS_CRONOMETRO
     
     # Animação não está ativa - pode parar timer completamente
     call        PARAR_TIMER_SISTEMA
@@ -147,24 +149,24 @@ CANCELAR_APENAS_CRONOMETRO:
     
 FINALIZAR_CANCELAMENTO_CRONOMETRO:
     # Desativa cronômetro
-    movia       r1, CRONOMETRO_ATIVO
-    stw         r0, (r1)
+    movia       r18, CRONOMETRO_ATIVO
+    stw         r0, (r18)
     
     # Zera flag de tick do cronômetro
-    movia       r1, CRONOMETRO_TICK_FLAG
-    stw         r0, (r1)
+    movia       r18, CRONOMETRO_TICK_FLAG
+    stw         r0, (r18)
     
     # Zera contador de ticks
-    movia       r1, CRONOMETRO_CONTADOR_TICKS
-    stw         r0, (r1)
+    movia       r18, CRONOMETRO_CONTADOR_TICKS
+    stw         r0, (r18)
     
     # Zera cronômetro
-    movia       r1, CRONOMETRO_SEGUNDOS
-    stw         r0, (r1)
+    movia       r18, CRONOMETRO_SEGUNDOS
+    stw         r0, (r18)
     
     # Limpa displays
-    movia       r1, HEX_BASE
-    stwio       r0, (r1)
+    movia       r18, HEX_BASE
+    stwio       r0, (r18)
     
     # Mensagem de confirmação
     movia       r4, MSG_CRONOMETRO_CANCELADO
@@ -176,12 +178,14 @@ CRONOMETRO_JA_ATIVO:
 FIM_CRONOMETRO:
     # --- Stack Frame Epilogue (ABI Standard) ---
     # Restaura registradores na ordem inversa
-    ldw         r18, 0(fp)
-    ldw         r17, 4(fp)
-    ldw         r16, 8(fp)
-    ldw         ra, 12(fp)
-    ldw         fp, 16(fp)
-    addi        sp, sp, 20
+    ldw         r20, 0(fp)
+    ldw         r19, 4(fp)
+    ldw         r18, 8(fp)
+    ldw         r17, 12(fp)
+    ldw         r16, 16(fp)
+    ldw         ra, 20(fp)
+    ldw         fp, 24(fp)
+    addi        sp, sp, 28
     ret
 
 #========================================================================================================================================
@@ -195,21 +199,28 @@ FIM_CRONOMETRO:
 #------------------------------------------------------------------------
 EXTRAIR_OPERACAO_CRONOMETRO:
     # --- Stack Frame Prologue ---
-    subi        sp, sp, 8
-    stw         ra, 4(sp)
-    stw         r16, 0(sp)
+    subi        sp, sp, 16
+    stw         ra, 12(sp)
+    stw         r16, 8(sp)
+    stw         r17, 4(sp)
+    stw         r18, 0(sp)
     
     # Lê segundo caractere (posição 1)
     addi        r16, r16, 1             # Aponta para posição 1
-    ldb         r1, (r16)               # Carrega caractere
+    ldb         r17, (r16)              # Carrega caractere
     
-    # Converte ASCII para número
-    subi        r2, r1, ASCII_ZERO      # r2 = operação
+    # Converte ASCII para número usando registrador callee-saved
+    subi        r18, r17, ASCII_ZERO    # r18 = operação
+    
+    # Move resultado para registrador de retorno
+    mov         r2, r18
     
     # --- Stack Frame Epilogue ---
-    ldw         r16, 0(sp)
-    ldw         ra, 4(sp)
-    addi        sp, sp, 8
+    ldw         r18, 0(sp)
+    ldw         r17, 4(sp)
+    ldw         r16, 8(sp)
+    ldw         ra, 12(sp)
+    addi        sp, sp, 16
     ret
 
 #========================================================================================================================================
@@ -252,39 +263,6 @@ INICIALIZAR_ESTADO_CRONOMETRO:
 #------------------------------------------------------------------------
 PARAR_TIMER_SISTEMA:
     # --- Stack Frame Prologue ---
-    subi        sp, sp, 8
-    stw         ra, 4(sp)
-    stw         r16, 0(sp)
-    
-    movia       r16, TIMER_BASE
-    
-    # Para timer primeiro
-    stwio       r0, 4(r16)              # control = 0
-    
-    # Limpa flag de timeout
-    movi        r1, 1
-    stwio       r1, 0(r16)              # status = 1
-    
-    # Desabilita interrupções do timer temporariamente
-    wrctl       ienable, r0             # Desabilita todas IRQs
-    
-    # Pequeno delay para garantir que timer parou
-    movi        r1, 1000
-DELAY_PARAR:
-    subi        r1, r1, 1
-    bne         r1, r0, DELAY_PARAR
-    
-    # --- Stack Frame Epilogue ---
-    ldw         r16, 0(sp)
-    ldw         ra, 4(sp)
-    addi        sp, sp, 8
-    ret
-
-#------------------------------------------------------------------------
-# Configura e inicia timer para cronômetro
-#------------------------------------------------------------------------
-CONFIGURAR_TIMER_CRONOMETRO:
-    # --- Stack Frame Prologue ---
     subi        sp, sp, 12
     stw         ra, 8(sp)
     stw         r16, 4(sp)
@@ -292,13 +270,50 @@ CONFIGURAR_TIMER_CRONOMETRO:
     
     movia       r16, TIMER_BASE
     
+    # Para timer primeiro
+    stwio       r0, 4(r16)              # control = 0
+    
+    # Limpa flag de timeout
+    movi        r17, 1
+    stwio       r17, 0(r16)             # status = 1
+    
+    # Desabilita interrupções do timer temporariamente
+    wrctl       ienable, r0             # Desabilita todas IRQs
+    
+    # Pequeno delay para garantir que timer parou
+    movi        r17, 1000
+DELAY_PARAR:
+    subi        r17, r17, 1
+    bne         r17, r0, DELAY_PARAR
+    
+    # --- Stack Frame Epilogue ---
+    ldw         r17, 0(sp)
+    ldw         r16, 4(sp)
+    ldw         ra, 8(sp)
+    addi        sp, sp, 12
+    ret
+
+#------------------------------------------------------------------------
+# Configura e inicia timer para cronômetro
+#------------------------------------------------------------------------
+CONFIGURAR_TIMER_CRONOMETRO:
+    # --- Stack Frame Prologue ---
+    subi        sp, sp, 20
+    stw         ra, 16(sp)
+    stw         r16, 12(sp)
+    stw         r17, 8(sp)
+    stw         r18, 4(sp)
+    stw         r19, 0(sp)
+    
+    movia       r16, TIMER_BASE
+    
     # Para timer primeiro (segurança)
     stwio       r0, 4(r16)              # Control = 0
     
     # Verifica se animação está ativa para escolher período
-    movia       r1, FLAG_INTERRUPCAO
-    ldw         r2, (r1)
-    bne         r2, r0, USAR_PERIODO_ANIMACAO
+    movia       r18, FLAG_INTERRUPCAO
+    ldw         r19, (r18)
+    bne         r19, r0, USAR_PERIODO_ANIMACAO
     
     # Apenas cronômetro - usa período de 1s
     movia       r17, CRONOMETRO_PERIODO
@@ -309,36 +324,38 @@ USAR_PERIODO_ANIMACAO:
     movia       r17, ANIMACAO_PERIODO
     
     # Zera contador de ticks do cronômetro
-    movia       r1, CRONOMETRO_CONTADOR_TICKS
-    stw         r0, (r1)
+    movia       r18, CRONOMETRO_CONTADOR_TICKS
+    stw         r0, (r18)
     
 CONFIGURAR_PERIODO:
     # Bits baixos do período
-    andi        r1, r17, 0xFFFF
-    stwio       r1, 8(r16)              # periodl
+    andi        r18, r17, 0xFFFF
+    stwio       r18, 8(r16)             # periodl
     
     # Bits altos do período  
     srli        r17, r17, 16
     stwio       r17, 12(r16)            # periodh
     
     # Limpa flag de timeout pendente
-    movi        r1, 1
-    stwio       r1, 0(r16)              # status = 1 (limpa TO)
+    movi        r18, 1
+    stwio       r18, 0(r16)             # status = 1 (limpa TO)
     
     # Habilita interrupções do timer
-    movi        r1, 1                   # IRQ0 para timer
-    wrctl       ienable, r1
-    wrctl       status, r1              # Habilita PIE
+    movi        r18, 1                  # IRQ0 para timer
+    wrctl       ienable, r18
+    wrctl       status, r18             # Habilita PIE
     
     # Inicia timer: START=1, CONT=1, ITO=1
-    movi        r1, 7                   # 0b111
-    stwio       r1, 4(r16)              # control
+    movi        r18, 7                  # 0b111
+    stwio       r18, 4(r16)             # control
     
     # --- Stack Frame Epilogue ---
-    ldw         r17, 0(sp)
-    ldw         r16, 4(sp)
-    ldw         ra, 8(sp)
-    addi        sp, sp, 12
+    ldw         r19, 0(sp)
+    ldw         r18, 4(sp)
+    ldw         r17, 8(sp)
+    ldw         r16, 12(sp)
+    ldw         ra, 16(sp)
+    addi        sp, sp, 20
     ret
 
 #------------------------------------------------------------------------
@@ -346,9 +363,10 @@ CONFIGURAR_PERIODO:
 #------------------------------------------------------------------------
 PARAR_TIMER_CRONOMETRO:
     # --- Stack Frame Prologue ---
-    subi        sp, sp, 8
-    stw         ra, 4(sp)
-    stw         r16, 0(sp)
+    subi        sp, sp, 12
+    stw         ra, 8(sp)
+    stw         r16, 4(sp)
+    stw         r17, 0(sp)
     
     movia       r16, TIMER_BASE
     
@@ -356,17 +374,18 @@ PARAR_TIMER_CRONOMETRO:
     stwio       r0, 4(r16)              # control = 0
     
     # Limpa flag de timeout
-    movi        r1, 1
-    stwio       r1, 0(r16)              # status = 1
+    movi        r17, 1
+    stwio       r17, 0(r16)             # status = 1
     
     # Desabilita interrupções do timer
     wrctl       ienable, r0             # Desabilita todas IRQs
     wrctl       status, r0              # Desabilita PIE
     
     # --- Stack Frame Epilogue ---
-    ldw         r16, 0(sp)
-    ldw         ra, 4(sp)
-    addi        sp, sp, 8
+    ldw         r17, 0(sp)
+    ldw         r16, 4(sp)
+    ldw         ra, 8(sp)
+    addi        sp, sp, 12
     ret
 
 #========================================================================================================================================
@@ -430,28 +449,30 @@ CONFIGURAR_KEY1_INTERRUPCAO:
 
 RECONFIGURAR_TIMER_PARA_ANIMACAO:
     # Salva registradores
-    subi        sp, sp, 8
-    stw         ra, 4(sp)
-    stw         r16, 0(sp)
+    subi        sp, sp, 12
+    stw         ra, 8(sp)
+    stw         r16, 4(sp)
+    stw         r17, 0(sp)
     
     # Para o timer atual
     movia       r16, TIMER_BASE
     stwio       r0, 4(r16)         # Para o timer
     
     # Configura período para animação (10.000.000 ciclos = 200ms @ 50MHz)
-    movia       r1, 0x00989680     # 10.000.000 em decimal
-    stwio       r1, 8(r16)         # periodl
-    srli        r1, r1, 16
-    stwio       r1, 12(r16)        # periodh
+    movia       r17, 0x00989680    # 10.000.000 em decimal
+    stwio       r17, 8(r16)        # periodl
+    srli        r17, r17, 16
+    stwio       r17, 12(r16)       # periodh
     
     # Reinicia o timer
-    movi        r1, 0x7            # START=1, CONT=1, ITO=1
-    stwio       r1, 4(r16)
+    movi        r17, 0x7           # START=1, CONT=1, ITO=1
+    stwio       r17, 4(r16)
     
     # Restaura registradores
-    ldw         r16, 0(sp)
-    ldw         ra, 4(sp)
-    addi        sp, sp, 8
+    ldw         r17, 0(sp)
+    ldw         r16, 4(sp)
+    ldw         ra, 8(sp)
+    addi        sp, sp, 12
     ret
 
 .global INICIAR_CRONOMETRO

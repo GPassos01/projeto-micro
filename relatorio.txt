@@ -1,0 +1,89 @@
+# RELATÓRIO TÉCNICO - PROJETO FINAL DE MICROPROCESSADORES
+
+## **Sistema de Controle Multifuncional para DE2-115 em Assembly Nios II**
+
+**Autores:** Amanda Oliveira, Lucas Ferrarotto, Gabriel Passos  
+**Disciplina:** Microprocessadores II  
+**Professor:** Alexandro Baldassin  
+**Semestre:** 1º Semestre de 2025  
+**Placa:** DE2-115 (Cyclone IV FPGA)  
+
+---
+
+### **1. INTRODUÇÃO**
+
+Este relatório detalha o projeto, desenvolvimento e otimização de um sistema de controle multifuncional para a placa DE2-115, implementado inteiramente em linguagem de montagem Nios II. O objetivo principal foi criar um sistema robusto e responsivo, capaz de gerenciar múltiplas tarefas concorrentes: controle de periféricos via UART, animações visuais com temporizadores precisos, e um cronômetro interativo.
+
+O sistema demonstra proficiência na manipulação de hardware em baixo nível, gerenciamento de interrupções, e conformidade rigorosa com a **Application Binary Interface (ABI)** do Nios II, resultando em um firmware estável, eficiente e profissional.
+
+---
+
+### **2. FUNCIONALIDADES IMPLEMENTADAS**
+
+O projeto foi **concluído com sucesso**, com todas as funcionalidades propostas implementadas e testadas:
+
+-   ✅ **Controle de LEDs Individuais:** Comandos via UART para acender (`00 xx`) e apagar (`01 xx`) qualquer um dos 18 LEDs vermelhos.
+-   ✅ **Animação Bidirecional:** Animação de LED com direção controlada em tempo real pelo `SW0` e velocidade de 200ms por passo.
+-   ✅ **Cronômetro Digital MM:SS:** Cronômetro de 00:00 a 99:59 exibido nos displays de 7 segmentos, com auto-reset.
+-   ✅ **Controle por Botão Físico:** O `KEY1` funciona como um controle de "pause/resume" para o cronômetro.
+-   ✅ **Interface UART Não-Bloqueante:** O console está sempre responsivo para novos comandos, mesmo durante a execução da animação e do cronômetro.
+
+---
+
+### **3. ARQUITETURA DO SISTEMA**
+
+A arquitetura foi projetada para ser modular, eficiente e robusta, utilizando um loop de polling não-bloqueante no `main.s` que coordena as diferentes tarefas.
+
+#### **3.1. Fluxo de Execução**
+
+O `MAIN_LOOP` é o coração do sistema, executando três tarefas a cada ciclo:
+1.  **PROCESSAR_TICKS_SISTEMA**: Verifica se a ISR sinalizou um tick do timer para atualizar a animação ou o cronômetro.
+2.  **PROCESSAR_CHAR_UART**: Verifica se há um novo caractere na UART para ser adicionado ao buffer de comando.
+3.  **PROCESSAR_BOTOES**: Verifica o estado dos botões para a funcionalidade de pause/resume.
+
+Esta arquitetura garante que nenhuma tarefa bloqueie as outras, tornando o sistema altamente responsivo.
+
+#### **3.2. Gerenciamento de Interrupções**
+
+-   **ISR Mínima e Rápida**: A rotina de serviço de interrupção (`INTERRUPCAO_HANDLER`) é extremamente otimizada. Sua única responsabilidade é limpar a flag do timer no hardware e sinalizar ao loop principal que um "tick" ocorreu, delegando toda a lógica de processamento.
+-   **Timer Compartilhado Inteligente**: Um único timer de hardware é usado para a animação (200ms) e o cronômetro (1s). A ISR identifica qual sistema está ativo (ou ambos) e gerencia os ticks de forma sincronizada, usando um contador interno quando necessário para garantir a precisão de 1 segundo do cronômetro mesmo quando a animação está ativa.
+
+---
+
+### **4. DESAFIOS TÉCNICOS E SOLUÇÕES**
+
+Durante o desenvolvimento, vários desafios técnicos foram encontrados e superados, demonstrando um processo de depuração sistemático.
+
+#### **4.1. Conflito UART vs. Timer**
+-   **Problema**: A UART se tornava irresponsiva quando as interrupções do timer estavam ativas.
+-   **Solução**: Implementação de **seções críticas atômicas** no `main.s`. As interrupções são desabilitadas por um período mínimo (2-3 ciclos de clock) apenas durante a leitura e escrita na UART, garantindo a integridade dos dados sem impactar a performance do sistema.
+
+#### **4.2. Retorno Incorreto da ISR (Salto para 0x0)**
+-   **Problema**: O programa travava após a primeira interrupção, com o `eret` retornando para o endereço `0x0`.
+-   **Causa**: Corrupção de registradores. A ISR não estava salvando todos os registradores temporários que eram modificados indiretamente por pseudo-instruções (`movia`).
+-   **Solução**: Implementação de um **prólogo e epílogo completos na ISR**, salvando e restaurando todos os registradores que poderiam ser utilizados (`ra`, `r8-r12`), garantindo a integridade do contexto do programa interrompido.
+
+#### **4.3. Falha no Parsing de Comandos**
+-   **Problema**: Os comandos de LED não funcionavam devido a erros de parsing.
+-   **Causa**: Uso indevido do registrador `r1` (`at`), que é reservado para o montador, e erro nos offsets de leitura dos caracteres do comando (não considerando o espaço).
+-   **Solução**: O código foi refatorado para usar apenas registradores seguros (`r8-r11`) e os offsets foram corrigidos para `3` e `4`.
+
+#### **4.4. Cronômetro Acelerado**
+-   **Problema**: Ao pausar a animação, o cronômetro acelerava, contando a cada 200ms.
+-   **Solução**: Foi implementada uma lógica de **reconfiguração dinâmica do timer**. Ao parar um dos sistemas (animação ou cronômetro), o timer é reconfigurado para o período do sistema que continua ativo, garantindo a precisão do tempo.
+
+---
+
+### **5. CONFORMIDADE COM A ABI NIOS II**
+
+O projeto segue rigorosamente as convenções da **Application Binary Interface (ABI)** do Nios II:
+-   **Stack Frames**: Todas as funções, incluindo as "folhas", utilizam um prólogo para salvar o `ra` (return address) e `fp` (frame pointer) e um epílogo para restaurá-los, garantindo o encadeamento correto da pilha.
+-   **Uso de Registradores**: A convenção de registradores *caller-saved* (`r1-r15`) para valores temporários e *callee-saved* (`r16-r23`) para valores que precisam ser preservados foi estritamente seguida.
+
+---
+
+### **6. CONCLUSÃO**
+
+O desenvolvimento deste projeto foi uma jornada de aprendizado profundo em programação de baixo nível, gerenciamento de hardware e depuração sistemática. Os desafios encontrados, especialmente os relacionados a interrupções e gerenciamento de memória, foram cruciais para o desenvolvimento de um sistema verdadeiramente robusto.
+
+O resultado final é um firmware **completo, estável e eficiente**, que cumpre todos os requisitos propostos no documento do projeto e demonstra a aplicação prática de conceitos teóricos de microprocessadores em um ambiente de hardware real. A modularidade e a conformidade com a ABI garantem que o projeto seja facilmente expansível e manutenível.
