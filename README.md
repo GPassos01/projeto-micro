@@ -443,7 +443,7 @@ movia sp, 0x2000        # ❌ Muito baixo
 #### **Testar Isoladamente:**
 ```bash
 # Testar cada funcionalidade separadamente:
-1. LEDs: 0005, 0105 (acender/apagar)
+1. LEDs: 00 05, 01 05 (acender/apagar)
 2. Animação: 10, 11 (iniciar/parar)  
 3. Cronômetro: 20, 21 (iniciar/cancelar)
 4. Botão: KEY1 com cronômetro ativo
@@ -455,7 +455,7 @@ movia sp, 0x2000        # ❌ Muito baixo
 
 ### ✅ Funcionalidades Implementadas
 
-- [x] **Controle Individual de LEDs** (00xx/01xx)
+- [x] **Controle Individual de LEDs** (00 xx/01 xx)
 - [x] **Animação Bidirecional** (10/11 + SW0)
 - [x] **Cronômetro MM:SS** (20/21 + KEY1)
 - [x] **Timer Compartilhado Inteligente**
@@ -502,7 +502,7 @@ movia sp, 0x2000        # ❌ Muito baixo
 ## 👥 Contribuidores
 
 **Gabriel Passos**  
-**Lucas Ferrarotto**
+**Lucas Ferrarotto** 
 **Amanda Oliveira**
 
 ---
