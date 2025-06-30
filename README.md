@@ -324,9 +324,8 @@ if (cronometro_ativo && animacao_ativa) {
 
 ### 📋 Pré-requisitos
 
-- **Quartus II 11.0sp1** ou superior
-- **Nios II EDS** (Embedded Design Suite)
-- **Monitor Program** para upload
+- **Quartus II 11.0sp1**
+- **Altera Monitor Program** para upload
 - **Placa DE2-115** com sistema Nios II/e
 
 ### 🔧 Passos de Compilação
