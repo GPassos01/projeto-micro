@@ -2,7 +2,7 @@
 # PROJETO MICROPROCESSADORES - NIOS II ASSEMBLY
 # Arquivo: led.s
 # Descrição: Controle Individual de LEDs Vermelhos da DE2-115
-# ABI Compliant: ✅ 100% - Seguindo convenções rigorosas da ABI Nios II
+# ABI Compliant: 100% - Seguindo convenções rigorosas da ABI Nios II
 #
 # FUNCIONALIDADES:
 # - Controle individual de 18 LEDs (0-17)
@@ -17,7 +17,7 @@
 # - "0000" → Acende LED 0  
 # - "0117" → Apaga LED 17
 #
-# AUTORES: Gabriel Passos e Lucas Ferrarotto - 1º Semestre 2025
+# AUTORES: Amanda Oliveira, Gabriel Passos e Lucas Ferrarotto - 1º Semestre 2025
 #========================================================================================================================================
 
 .global _led
