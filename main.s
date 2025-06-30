@@ -2,7 +2,7 @@
 # PROJETO MICROPROCESSADORES - NIOS II ASSEMBLY
 # Arquivo: main.s  
 # Descrição: Loop Principal e Gerenciamento de Comandos UART
-# ABI Compliant: ✅ 100% - Seguindo convenções rigorosas da ABI Nios II
+# ABI Compliant: 100% - Seguindo convenções rigorosas da ABI Nios II
 # 
 # FUNCIONALIDADES PRINCIPAIS:
 # - Loop principal não-bloqueante com polling eficiente
@@ -13,7 +13,7 @@
 # - Funções de suporte ABI-compliant
 #
 # PLACA: DE2-115 (Cyclone IV FPGA)
-# AUTORES: Gabriel Passos e Lucas Ferrarotto - 1º Semestre 2025
+# AUTORES: Amanda Oliveira, Gabriel Passos e Lucas Ferrarotto - 1º Semestre 2025
 #========================================================================================================================================
 
 .global _start
