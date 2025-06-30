@@ -198,7 +198,7 @@ projeto-micro/
 ├── animacao.s         # Sistema de animação
 ├── led.s              # Controle individual de LEDs
 ├── cronometro.s       # Sistema de cronômetro
-└── DOCUMENTACAO_COMPLETA.md  # Esta documentação
+└── README.md          # Esta documentação
 ```
 
 ### 📋 Responsabilidades
