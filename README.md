@@ -27,7 +27,7 @@
 
 Este projeto implementa um **sistema completo de controle** para a placa DE2-115 usando Assembly Nios II, com funcionalidades avançadas de:
 
-- ✅ **Controle Individual de LEDs** (comandos 00xx/01xx)
+- ✅ **Controle Individual de LEDs** (comandos 00 xx/01 xx)
 - ✅ **Animação Bidirecional** com controle por switch (comandos 10/11)
 - ✅ **Cronômetro MM:SS** com displays 7-segmentos (comandos 20/21)
 - ✅ **Controle por Botão** (KEY1 para pause/resume do cronômetro)
@@ -105,17 +105,17 @@ ret
 
 ## 🎮 Funcionalidades
 
-### 1. 💡 Controle de LEDs (00xx/01xx)
+### 1. 💡 Controle de LEDs (00 xx/01 xx)
 
 ```bash
-Comando: 00xx  # Acende LED xx (00-17)
-Comando: 01xx  # Apaga LED xx (00-17)
+Comando: 00 xx  # Acende LED xx (00-17)
+Comando: 01 xx  # Apaga LED xx (00-17)
 
 Exemplos:
-0005  # Acende LED 5
-0112  # Apaga LED 12
-0000  # Acende LED 0
-0117  # Apaga LED 17
+00 05  # Acende LED 5
+01 12  # Apaga LED 12
+00 00  # Acende LED 0
+01 17  # Apaga LED 17
 ```
 
 **Características:**
@@ -168,8 +168,8 @@ KEY1          # Pausa/Resume (quando ativo)
 
 | Comando | Função | Exemplo | Resultado |
 |---------|--------|---------|-----------|
-| `00xx` | Acender LED xx | `0005` | Acende LED 5 |
-| `01xx` | Apagar LED xx | `0112` | Apaga LED 12 |
+| `00 xx` | Acender LED xx | `00 05` | Acende LED 5 |
+| `01 xx` | Apagar LED xx | `01 12` | Apaga LED 12 |
 | `10` | Iniciar animação | `10` | Inicia animação (direção via SW0) |
 | `11` | Parar animação | `11` | Para animação, restaura LEDs |
 | `20` | Iniciar cronômetro | `20` | Inicia cronômetro 00:00 |
