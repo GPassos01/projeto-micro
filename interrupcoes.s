@@ -53,7 +53,7 @@ INTERRUPCAO_HANDLER:
     stw     r8, 12(sp)                  # Registrador de trabalho 1
     stw     r9, 8(sp)                   # Registrador de trabalho 2  
     stw     r10, 4(sp)                  # Registrador de trabalho 3
-    rdctl   r10, estatus                # Salva status de interrupções
+    rdctl   r10, estatus                # Salva status de interrupções: Exception Status Register → é um registrador de controle especial que armazena o status anterior de interrupções (interrupt enable bit).
     stw     r10, 0(sp)
     
     # Ajusta EA para interrupções de hardware (padrão Nios II)
