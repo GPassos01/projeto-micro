@@ -2,7 +2,7 @@
 # PROJETO MICROPROCESSADORES - NIOS II ASSEMBLY  
 # Arquivo: animacao.s
 # Descrição: Sistema de Animação Bidirecional de LEDs com Timer Inteligente
-# ABI Compliant: ✅ 100% - Seguindo convenções rigorosas da ABI Nios II
+# ABI Compliant: 100% - Seguindo convenções rigorosas da ABI Nios II
 #
 # FUNCIONALIDADES PRINCIPAIS:
 # - Animação bidirecional de LEDs (esquerda↔direita)
@@ -20,7 +20,7 @@
 # - SW0=0: Esquerda → Direita (LED 0→1→2→...→17→0)
 # - SW0=1: Direita → Esquerda (LED 17→16→15→...→0→17)
 #
-# AUTORES: Gabriel Passos e Lucas Ferrarotto - 1º Semestre 2025
+# AUTORES: Amanda Oliveira, Gabriel Passos e Lucas Ferrarotto - 1º Semestre 2025
 #========================================================================================================================================
 
 .global _animacao
